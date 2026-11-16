@@ -1,8 +1,16 @@
-import React, { useState, useMemo, useEffect, useCallback, useContext, createContext } from 'react';
-import { Plus, Trash2, Copy, Check as CheckIcon } from 'lucide-react';
+import React, { useState, useMemo, useEffect, useCallback, useContext, createContext, useRef } from 'react';
+import {
+  Plus, Trash2, Copy, Check as CheckIcon, Sun, Moon, Cloud, CloudOff,
+  Download, Upload, Search, Database, AlertTriangle, RefreshCw, X, ExternalLink, Activity
+} from 'lucide-react';
+import {
+  getCloudConfig, saveCloudConfig, isCloudConfigured, testCloudConnection,
+  syncAllPatientsToCloud, fetchAllPatientsFromCloud, SQL_SETUP_SCRIPT
+} from './lib/supabase.js';
 
 // ==== LOGIC START ====
 const KEY = 'nutriclinica.v1';
+const THEME_KEY = 'nutriclinica_theme';
 const MEALS = [
   ['des', 'Desayuno'],
   ['c1', 'Colación AM'],
@@ -63,6 +71,10 @@ const BIO = [
   { k: 'bun', n: 'Nitrógeno ureico (BUN)', s: 'BUN', u: 'mg/dL', ref: () => '7 – 20', f: v => rng(v, 7, 20) },
   { k: 'urea', n: 'Urea', s: 'urea', u: 'mg/dL', ref: () => '15 – 45', f: v => rng(v, 15, 45) },
   { k: 'albumina', n: 'Albúmina sérica', s: 'albúmina', u: 'g/dL', ref: () => '3.5 – 5.0', f: v => v > 5 ? lv('warn', 'Alta', '↑') : v >= 3.5 ? lv('ok', 'Normal', '✓') : v >= 2.8 ? lv('warn', 'Hipoalbuminemia leve', '↓') : v >= 2.1 ? lv('crit', 'Hipoalbuminemia moderada', '↓') : lv('crit', 'Hipoalbuminemia grave', '↓') },
+  { k: 'fosforo', n: 'Fósforo sérico', s: 'fósforo', u: 'mg/dL', ref: () => '2.5 – 4.5', f: v => v < 2.5 ? lv('crit', 'Hipofosfatemia (alerta realimentación)', '↓') : v > 4.5 ? lv('warn', 'Hiperfosfatemia', '↑') : lv('ok', 'Normal', '✓') },
+  { k: 'calcio', n: 'Calcio sérico', s: 'calcio', u: 'mg/dL', ref: () => '8.5 – 10.2', f: v => v < 8.5 ? lv('warn', 'Hipocalcemia', '↓') : v > 10.2 ? lv('warn', 'Hipercalcemia', '↑') : lv('ok', 'Normal', '✓') },
+  { k: 'magnesio', n: 'Magnesio sérico', s: 'magnesio', u: 'mg/dL', ref: () => '1.7 – 2.4', f: v => v < 1.7 ? lv('warn', 'Hipomagnesemia', '↓') : v > 2.4 ? lv('warn', 'Hipermagnesemia', '↑') : lv('ok', 'Normal', '✓') },
+  { k: 'pcr', n: 'Proteína C Reactiva (PCR)', s: 'PCR', u: 'mg/L', ref: () => '< 5.0', f: v => v > 10 ? lv('crit', 'Inflamación aguda / severa', '↑') : v > 5 ? lv('warn', 'Elevada (inflamación leve)', '↑') : lv('ok', 'Normal', '✓') },
   { k: 'colesterol', n: 'Colesterol total', s: 'colesterol total', u: 'mg/dL', ref: () => '< 200', f: v => v < 200 ? lv('ok', 'Deseable', '✓') : v < 240 ? lv('warn', 'Limítrofe', '↑') : lv('crit', 'Alto', '↑') },
   { k: 'ldl', n: 'Colesterol LDL', s: 'LDL', u: 'mg/dL', ref: () => '< 100', f: v => v < 100 ? lv('ok', 'Óptimo', '✓') : v < 130 ? lv('ok', 'Cercano al óptimo', '✓') : v < 160 ? lv('warn', 'Limítrofe alto', '↑') : v < 190 ? lv('crit', 'Alto', '↑') : lv('crit', 'Muy alto', '↑') },
   { k: 'hdl', n: 'Colesterol HDL', s: 'HDL', u: 'mg/dL', ref: s => s === 'M' ? '≥ 40' : s === 'F' ? '≥ 50' : '≥ 40 (H) / ≥ 50 (M)', f: (v, s) => { const lo = s === 'F' ? 50 : 40; return v < lo ? lv('warn', 'Bajo', '↓') : v >= 60 ? lv('ok', 'Alto (protector)', '✓') : lv('ok', 'Aceptable', '✓'); } },
@@ -110,7 +122,7 @@ const PROBLEMAS = [
   ['Conductual y ambiental', ['Conocimientos deficientes relacionados con la alimentación y la nutrición', 'Creencias y actitudes alimentarias inadecuadas', 'Poca disposición para el cambio en la dieta o el estilo de vida', 'Selección inadecuada de alimentos', 'Actividad física insuficiente', 'Acceso limitado a alimentos o agua']],
 ];
 const OTRO = '__otro__';
-const ETIO_SUG = ['ingesta oral limitada por náuseas, disgeusia y saciedad temprana', 'consumo frecuente de bebidas azucaradas y alimentos ultraprocesados', 'desequilibrio entre la ingesta y el gasto energético', 'conocimientos insuficientes sobre alimentación saludable', 'incremento de las necesidades por estado catabólico', 'restricciones dietéticas impuestas por la enfermedad', 'acceso limitado a alimentos', 'actividad física insuficiente'];
+const ETIO_SUG = ['ingesta oral limitada por náuseas, disgeusia y saciedad temprana', 'consumo frecuente de bebidas azucaradas y alimentos ricos en grasa, con baja actividad física', 'desequilibrio entre la ingesta y el gasto energético', 'conocimientos insuficientes sobre alimentación saludable', 'incremento de las necesidades por estado catabólico', 'restricciones dietéticas impuestas por la enfermedad', 'acceso limitado a alimentos', 'actividad física insuficiente'];
 const REC_SUG = ['Fraccionar la alimentación en 5 tiempos de comida al día.', 'Preferir cereales integrales y tubérculos cocidos en porciones medidas.', 'Sustituir las bebidas azucaradas por agua natural.', 'Aumentar el consumo de verduras y frutas enteras.', 'Limitar el sodio a menos de 2,000 mg al día y no agregar sal en la mesa.', 'Preferir preparaciones al horno, asadas o hervidas en lugar de fritas.', 'Acompañar cada tiempo principal con una fuente de proteína de alto valor biológico.', 'Realizar al menos 150 minutos de actividad física moderada por semana, según tolerancia.', 'Registrar peso y glucosa capilar y llevar el registro a la siguiente consulta.'];
 
 const DW = {
@@ -215,9 +227,16 @@ function calc(p) {
     const lim = sexo === 'M' ? 0.90 : 0.85;
     o.iccCl = o.icc > lim ? lv('warn', 'Obesidad abdominal', '↑') : lv('ok', 'Normal', '✓');
   }
+
+  // Antropometría muscular y Heymsfield AMBc
   const cb = num(a.cb), tri = num(a.pct);
   o.cmb = cb != null && tri != null ? cb - Math.PI * tri / 10 : null;
   o.amb = o.cmb != null ? o.cmb * o.cmb / (4 * Math.PI) : null;
+  o.ambc = null;
+  if (o.amb != null && (sexo === 'M' || sexo === 'F')) {
+    o.ambc = sexo === 'M' ? Math.max(0, o.amb - 10) : Math.max(0, o.amb - 6.5);
+  }
+
   const pl = [a.pct, a.pbi, a.psub, a.psup].map(num);
   o.sum4 = pl.every(x => x != null) ? pl.reduce((s, x) => s + x, 0) : null;
   o.gc = null;
@@ -234,13 +253,63 @@ function calc(p) {
   // peso de cálculo
   o.wCalc = r.pesoBase === 'ideal' ? o.pi : r.pesoBase === 'ajustado' ? o.pAj : peso;
 
-  // bioquímica
+  // bioquímica básica
   o.bio = BIO.map(b => {
     const v = num(p.bio[b.k]);
     return { k: b.k, n: b.n, s: b.s, u: b.u, ref: b.ref(sexo), v, flag: v == null ? null : b.f(v, sexo) };
   });
 
-  // gasto energético
+  // TFG estimada (CKD-EPI 2021)
+  const cr = num(p.bio.creatinina);
+  o.egfr = null;
+  o.egfrStage = null;
+  o.egfrFlag = null;
+  if (cr != null && cr > 0 && edad != null && edad >= 18 && (sexo === 'M' || sexo === 'F')) {
+    const isFem = sexo === 'F';
+    const kappa = isFem ? 0.7 : 0.9;
+    const alpha = isFem ? -0.241 : -0.302;
+    const crK = cr / kappa;
+    const minCr = Math.min(crK, 1);
+    const maxCr = Math.max(crK, 1);
+    const egfrVal = 142 * Math.pow(minCr, alpha) * Math.pow(maxCr, -1.200) * Math.pow(0.9938, edad) * (isFem ? 1.012 : 1.0);
+    o.egfr = egfrVal;
+
+    if (egfrVal >= 90) {
+      o.egfrStage = 'Estadio G1 (Normal / Alto)';
+      o.egfrFlag = lv('ok', '≥ 90 mL/min (G1 · Normal)', '✓');
+    } else if (egfrVal >= 60) {
+      o.egfrStage = 'Estadio G2 (Levemente disminuida)';
+      o.egfrFlag = lv('ok', '60–89 mL/min (G2 · Leve)', '✓');
+    } else if (egfrVal >= 45) {
+      o.egfrStage = 'Estadio G3a (Disminución leve-moderada)';
+      o.egfrFlag = lv('warn', '45–59 mL/min (G3a)', '↓');
+    } else if (egfrVal >= 30) {
+      o.egfrStage = 'Estadio G3b (Disminución moderada-grave)';
+      o.egfrFlag = lv('warn', '30–44 mL/min (G3b)', '↓');
+    } else if (egfrVal >= 15) {
+      o.egfrStage = 'Estadio G4 (Disminución grave)';
+      o.egfrFlag = lv('crit', '15–29 mL/min (G4 · Grave)', '↓');
+    } else {
+      o.egfrStage = 'Estadio G5 (Falla renal terminal)';
+      o.egfrFlag = lv('crit', '< 15 mL/min (G5 · Falla)', '↓');
+    }
+  }
+
+  // Calcio Corregido por Albúmina
+  const ca = num(p.bio.calcio);
+  const alb = num(p.bio.albumina);
+  o.caCorregido = null;
+  o.caCorregidoFlag = null;
+  if (ca != null) {
+    if (alb != null && alb < 4.0) {
+      o.caCorregido = ca + 0.8 * (4.0 - alb);
+    } else {
+      o.caCorregido = ca;
+    }
+    o.caCorregidoFlag = o.caCorregido < 8.5 ? lv('warn', 'Hipocalcemia corregida', '↓') : o.caCorregido > 10.2 ? lv('warn', 'Hipercalcemia corregida', '↑') : lv('ok', 'Normal', '✓');
+  }
+
+  // Gasto energético
   const F = r.formula, W = o.wCalc, A = edad, M = sexo === 'M';
   o.kgMode = !!(FORMULAS.find(x => x.k === F) || {}).kg;
   let geb = null;
@@ -258,7 +327,7 @@ function calc(p) {
   o.vct = o.get == null ? null : o.get + o.ajuste;
   o.kcalkg = o.vct && W ? o.vct / W : null;
 
-  // macronutrientes
+  // Macronutrientes
   o.macros = null;
   if (o.vct && W) {
     const m = {};
@@ -288,12 +357,12 @@ function calc(p) {
   const liq = num(r.liq);
   o.liquidos = liq && peso ? liq * peso : null;
 
-  // dieta
+  // Dieta
   const ke = num(d.kcalEst), pe = num(d.protEst);
   o.adecKcal = ke != null && o.vct ? ke / o.vct * 100 : null;
   o.adecProt = pe != null && o.macros ? pe / o.macros.p.g * 100 : null;
 
-  // tamizaje (criterios ASPEN/AND)
+  // Tamizaje (criterios ASPEN/AND)
   const crit = [];
   let datos = 0;
   if (d.ingesta) { datos++; if (d.ingesta !== '>75') crit.push('Ingesta energética insuficiente'); }
@@ -306,8 +375,7 @@ function calc(p) {
 
   const extra = [];
   if ((o.imc != null && o.imcCl && o.imcCl.label.toLowerCase().includes('bajo peso')) || (o.imc != null && o.imc < 18.5)) extra.push('IMC en rango de bajo peso');
-  const alb = num(p.bio.albumina);
-  if (alb != null && alb < 3.5) extra.push('Albúmina baja (marcador de inflamación, no de estado nutricional por sí solo)');
+  if (alb != null && alb < 3.5) extra.push('Albúmina baja (marcador de inflamación sistémica)');
 
   o.tamizaje = {
     crit,
@@ -316,6 +384,36 @@ function calc(p) {
     msg: crit.length >= 2 ? 'Cumple 2 o más de las 6 características: compatible con desnutrición (criterios ASPEN/AND). Confirme con el juicio clínico.' : crit.length === 1 ? 'Cumple 1 característica. Vigile la evolución y reevalúe.' : 'Sin características de desnutrición con los datos ingresados.',
     level: crit.length >= 2 ? 'crit' : crit.length === 1 ? 'warn' : 'ok'
   };
+
+  // Alerta de Síndrome de Realimentación (Criterios NICE / ASPEN)
+  const pFos = num(p.bio.fosforo);
+  const pK = num(p.bio.potasio);
+  const pMg = num(p.bio.magnesio);
+  const refeedingReasons = [];
+  let majorCriteria = 0;
+  let minorCriteria = 0;
+
+  if (o.imc != null && o.imc < 16) { majorCriteria++; refeedingReasons.push(`IMC extremadamente bajo (${f1(o.imc)} kg/m² < 16)`); }
+  else if (o.imc != null && o.imc < 18.5) { minorCriteria++; refeedingReasons.push(`IMC en bajo peso (${f1(o.imc)} kg/m² < 18.5)`); }
+
+  if (o.cambio != null && o.cambio > 15) { majorCriteria++; refeedingReasons.push(`Pérdida de peso severa (${f1(o.cambio)} % en ${per.l})`); }
+  else if (o.cambio != null && o.cambio >= 10) { minorCriteria++; refeedingReasons.push(`Pérdida de peso moderada (${f1(o.cambio)} % en ${per.l})`); }
+
+  if (d.ingesta === '<50') { majorCriteria++; refeedingReasons.push('Ingesta alimentaria muy deficiente (< 50 %)'); }
+  else if (d.ingesta === '50-75') { minorCriteria++; refeedingReasons.push('Ingesta alimentaria reducida (50–75 %)'); }
+
+  if ((pFos != null && pFos < 2.5) || (pK != null && pK < 3.5) || (pMg != null && pMg < 1.7)) {
+    majorCriteria++;
+    refeedingReasons.push('Electrolitos séricos basales disminuidos (Fósforo, Potasio o Magnesio)');
+  }
+
+  const isHighRefeeding = majorCriteria >= 1 || minorCriteria >= 2;
+  o.refeeding = {
+    isRisk: isHighRefeeding,
+    level: isHighRefeeding ? 'crit' : 'ok',
+    reasons: refeedingReasons
+  };
+
   o.plan = planTotals(p);
   return o;
 }
@@ -325,6 +423,7 @@ function evidencias(p, o) {
   if (o.imc != null && o.imcCl) E.push(`IMC ${f1(o.imc)} kg/m² (${o.imcCl.label.toLowerCase()})`);
   if (o.cambio != null && o.cambio > 0) E.push(`pérdida de peso de ${f1(o.cambio)} % en ${o.per.l.toLowerCase()}`);
   if (o.cintura != null) E.push(`circunferencia de cintura de ${f0(o.cintura)} cm${o.cinturaCl && o.cinturaCl.level !== 'ok' ? ' (' + o.cinturaCl.label.toLowerCase() + ')' : ''}`);
+  if (o.egfr != null) E.push(`TFG estimada ${f0(o.egfr)} mL/min/1.73m² (${o.egfrStage})`);
   o.bio.forEach(b => {
     if (b.v != null && b.flag && b.flag.level !== 'ok') E.push(`${b.s} ${b.v} ${b.u} (${b.flag.label.toLowerCase()})`);
   });
@@ -393,7 +492,7 @@ const blankPatient = () => ({
   ejemplo: false,
   gen: { nombre: '', edad: '', sexo: '', fecha: today(), expediente: '', dx: '', motivo: '', meds: '', antecedentes: '' },
   antro: { peso: '', talla: '', habitual: '', periodo: '3m', cintura: '', cadera: '', cb: '', pct: '', pbi: '', psub: '', psup: '' },
-  bio: { glucosa: '', hba1c: '', creatinina: '', bun: '', urea: '', albumina: '', colesterol: '', ldl: '', hdl: '', tg: '', potasio: '', sodio: '', hemoglobina: '' },
+  bio: { glucosa: '', hba1c: '', creatinina: '', bun: '', urea: '', albumina: '', fosforo: '', calcio: '', magnesio: '', pcr: '', colesterol: '', ldl: '', hdl: '', tg: '', potasio: '', sodio: '', hemoglobina: '' },
   clin: { sint: {}, pat: {}, musculo: 'normal', grasa: 'normal', edema: 'no', ascitis: 'no', fuerza: '', hidratacion: '', piel: '', oral: '', otros: '' },
   dieta: { rec: {}, ingesta: '', kcalEst: '', protEst: '', agua: '', alcohol: '', tabaco: '', suplementos: '', alergias: '', apetito: '', actividad: '', frec: {}, notas: '' },
   req: { formula: 'mifflin', pesoBase: 'real', kcalkg: '30', actKey: 'sed', actVal: '1.2', estKey: 'none', estVal: '1', ajuste: '0', modo: 'pct', pct: { p: '15', c: '55', l: '30' }, gkg: { p: '1', c: '4', l: '1' }, liq: '30' },
@@ -407,7 +506,7 @@ function seedPatients() {
     ejemplo: true,
     gen: { nombre: 'María Elena Rivas', edad: '54', sexo: 'F', expediente: 'EJ-0001', dx: 'Diabetes mellitus tipo 2, obesidad grado I e hipertensión arterial', motivo: 'Control glucémico y reducción de peso', meds: 'Metformina 850 mg cada 12 h; losartán 50 mg al día', antecedentes: 'Madre con diabetes tipo 2.' },
     antro: { peso: '78.5', talla: '158', habitual: '81', periodo: '3m', cintura: '98', cadera: '108', cb: '31', pct: '24', pbi: '12', psub: '28', psup: '30' },
-    bio: { glucosa: '142', hba1c: '7.8', creatinina: '0.8', bun: '14', urea: '30', albumina: '4.1', colesterol: '218', ldl: '138', hdl: '44', tg: '195', potasio: '4.2', sodio: '139', hemoglobina: '12.8' },
+    bio: { glucosa: '142', hba1c: '7.8', creatinina: '0.8', bun: '14', urea: '30', albumina: '4.1', fosforo: '3.6', calcio: '9.4', magnesio: '2.0', pcr: '6.2', colesterol: '218', ldl: '138', hdl: '44', tg: '195', potasio: '4.2', sodio: '139', hemoglobina: '12.8' },
     clin: { sint: { pirosis: true, distension: true }, pat: { dm2: true, hta: true, dislipidemia: true, obesidad: true }, fuerza: 'normal', hidratacion: 'normal' },
     dieta: { rec: { des: { hora: '07:00', txt: '2 tortillas de maíz, 1 huevo revuelto con aceite, 1 taza de café con 2 cucharadas de azúcar' }, c1: { hora: '10:00', txt: '1 pan dulce y 1 gaseosa de 355 mL' }, alm: { hora: '13:00', txt: '1 taza de arroz, 1 muslo de pollo frito, ensalada pequeña, 1 vaso de refresco natural con azúcar' }, c2: { hora: '16:30', txt: '1 banano' }, cen: { hora: '19:30', txt: '3 pupusas de queso con curtido, 1 taza de café con azúcar' } }, ingesta: '>75', kcalEst: '2300', protEst: '78', agua: '4 vasos al día', alcohol: 'No', tabaco: 'No', suplementos: 'Ninguno', alergias: 'Ninguna conocida', apetito: 'Conservado', actividad: 'Caminata ocasional, menos de 30 min, 2 veces por semana', frec: { cer: 'd', ver: 'w13', fru: 'w13', lac: 'w13', car: 'd', leg: 'w13', gra: 'd', azu: 'd', ult: 'w13' } },
     req: { formula: 'mifflin', pesoBase: 'real', actKey: 'lig', actVal: '1.375', ajuste: '-400', modo: 'pct', pct: { p: '20', c: '45', l: '35' } },
@@ -431,7 +530,7 @@ function seedPatients() {
     ejemplo: true,
     gen: { nombre: 'Carlos Alberto Méndez', edad: '71', sexo: 'M', expediente: 'EJ-0002', dx: 'Enfermedad renal crónica estadio 4 sin diálisis e hipertensión arterial', motivo: 'Pérdida de peso y disminución del apetito en los últimos 3 meses', meds: 'Amlodipino 5 mg al día; carbonato de calcio; eritropoyetina' },
     antro: { peso: '58', talla: '170', habitual: '66', periodo: '3m', cintura: '84', cadera: '94', cb: '24', pct: '8', pbi: '5', psub: '10', psup: '9' },
-    bio: { glucosa: '96', hba1c: '5.6', creatinina: '3.4', bun: '58', urea: '124', albumina: '3.0', colesterol: '170', ldl: '92', hdl: '38', tg: '140', potasio: '5.3', sodio: '138', hemoglobina: '10.2' },
+    bio: { glucosa: '96', hba1c: '5.6', creatinina: '3.4', bun: '58', urea: '124', albumina: '3.0', fosforo: '5.2', calcio: '8.2', magnesio: '2.1', pcr: '12.5', colesterol: '170', ldl: '92', hdl: '38', tg: '140', potasio: '5.3', sodio: '138', hemoglobina: '10.2' },
     clin: { sint: { nauseas: true, hiporexia: true, disgeusia: true, saciedad: true }, pat: { erc: true, hta: true }, musculo: 'moderada', grasa: 'leve', edema: '+', ascitis: 'no', fuerza: 'disminuida', hidratacion: 'normal' },
     dieta: { rec: { des: { hora: '07:30', txt: '1 pan francés con frijoles molidos, café sin azúcar' }, alm: { hora: '13:00', txt: '½ taza de arroz, 1 trozo pequeño de pollo guisado, ½ tortilla' }, cen: { hora: '19:00', txt: '1 taza de atol de maíz y 1 pan' } }, ingesta: '<50', kcalEst: '1100', protEst: '38', agua: '1 litro al día (restricción indicada)', alcohol: 'No', tabaco: 'Exfumador', apetito: 'Muy disminuido, con saciedad temprana', actividad: 'Sedentario; camina dentro de casa', frec: { cer: 'd', ver: 'w13', fru: 'r', lac: 'w13', car: 'w46', leg: 'w46', gra: 'w13', azu: 'r', ult: 'w13' } },
     req: { formula: 'kdoqi', kcalkg: '32', actKey: 'sed', actVal: '1.2', ajuste: '0', modo: 'gkg', gkg: { p: '0.8', c: '4.95', l: '1' }, liq: '17' },
@@ -478,10 +577,12 @@ function reportText(p, o) {
   if (o.cambio != null) L.push(`Cambio de peso: ${fs(-o.cambio)} % en ${o.per.l.toLowerCase()}${o.cambioCl ? ' (' + o.cambioCl.label + ')' : ''}`);
   if (o.pi) L.push(`Peso ideal (Hamwi) ${f1(o.pi)} kg (${f0(o.pctPI)} % del ideal)`);
   if (o.cintura != null) L.push(`Cintura ${f1(o.cintura)} cm${o.cinturaCl ? ' (' + o.cinturaCl.label + ')' : ''}${o.icc != null ? ' | ICC ' + f2(o.icc) : ''}`);
-  if (o.cmb != null) L.push(`CMB ${f1(o.cmb)} cm | AMB ${f1(o.amb)} cm²`);
+  if (o.cmb != null) L.push(`CMB ${f1(o.cmb)} cm | AMB ${f1(o.amb)} cm²${o.ambc != null ? ' | AMBc (Heymsfield) ' + f1(o.ambc) + ' cm²' : ''}`);
   if (o.gc != null) L.push(`Grasa corporal estimada (Durnin-Womersley) ${f1(o.gc)} %`);
   L.push('');
   L.push('B. BIOQUÍMICA');
+  if (o.egfr != null) L.push(`Tasa de Filtración Glomerular (CKD-EPI 2021): ${f1(o.egfr)} mL/min/1.73m² (${o.egfrStage})`);
+  if (o.caCorregido != null) L.push(`Calcio corregido por albúmina: ${f1(o.caCorregido)} mg/dL (${o.caCorregidoFlag.label})`);
   const bs = o.bio.filter(b => b.v != null);
   if (!bs.length) L.push('Sin datos de laboratorio.');
   bs.forEach(b => L.push(`${b.n}: ${b.v} ${b.u} (ref. ${b.ref}) ${b.flag.dir} ${b.flag.label}`));
@@ -490,7 +591,8 @@ function reportText(p, o) {
   L.push(`Síntomas digestivos: ${lab(p.clin.sint, SINT).join(', ') || 'ninguno referido'}`);
   L.push(`Patologías coexistentes: ${lab(p.clin.pat, PATOL).join(', ') || 'ninguna registrada'}`);
   L.push(`Exploración física: masa muscular ${p.clin.musculo}; grasa subcutánea ${p.clin.grasa}; edema ${p.clin.edema === 'no' ? 'ausente' : p.clin.edema}; ascitis ${p.clin.ascitis === 'si' ? 'presente' : 'ausente'}`);
-  L.push(`Tamizaje: ${o.tamizaje.msg}`);
+  L.push(`Tamizaje desnutrición: ${o.tamizaje.msg}`);
+  if (o.refeeding.isRisk) L.push(`ALERTA: Alto riesgo de Síndrome de Realimentación detectado (${o.refeeding.reasons.join('; ')}).`);
   L.push('');
   L.push('D. DIETÉTICA');
   RECALL.forEach(([k, n]) => {
@@ -654,24 +756,56 @@ const TABS = [
   ['reporte', 'Reporte']
 ];
 
-function Header({ tab, setTab }) {
+function Header({ tab, setTab, theme, toggleTheme, onOpenCloud, isCloudActive }) {
   const { p, c } = useCtx();
   return (
     <header className="sticky z-30 bg-surface border-b border-line no-print" style={{ top: 'env(safe-area-inset-top, 0px)' }}>
       <div className="mx-auto max-w-[1400px] px-4 sm:px-6">
         <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 py-3">
-          <div className="min-w-0">
-            <h1 className="brandname">NutriClínica</h1>
-            <div className="text-xs text-muted truncate">{p.gen.nombre || 'Paciente sin nombre'}{p.ejemplo ? ' · ejemplo' : ''}</div>
+          <div className="flex items-center gap-3 min-w-0">
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="brandname">NutriClínica</h1>
+                <span className="pill ok text-[10px] py-0.5 px-2">v2.0 Clínico</span>
+              </div>
+              <div className="text-xs text-muted truncate">
+                {p.gen.nombre || 'Paciente sin nombre'}{p.ejemplo ? ' · ejemplo' : ''}
+              </div>
+            </div>
           </div>
-          <div className="flex flex-wrap gap-x-5 gap-y-1">
-            <Stat label="IMC" value={f1(c.imc)} unit="kg/m²" />
-            <Stat label="Cambio de peso" value={c.cambio == null ? '—' : fs(-c.cambio)} unit="%" />
-            <Stat label="GEB" value={f0(c.geb)} unit="kcal" />
-            <Stat label="VCT" value={f0(c.vct)} unit="kcal" />
-            <Stat label="Proteína" value={c.macros ? f0(c.macros.p.g) : '—'} unit="g" />
+
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+            <div className="hidden sm:flex flex-wrap gap-x-5 gap-y-1">
+              <Stat label="IMC" value={f1(c.imc)} unit="kg/m²" />
+              <Stat label="Cambio" value={c.cambio == null ? '—' : fs(-c.cambio)} unit="%" />
+              <Stat label="GEB" value={f0(c.geb)} unit="kcal" />
+              <Stat label="VCT" value={f0(c.vct)} unit="kcal" />
+              <Stat label="Proteína" value={c.macros ? f0(c.macros.p.g) : '—'} unit="g" />
+              {c.egfr != null && <Stat label="eGFR" value={f0(c.egfr)} unit="mL/min" />}
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                className={`btn btn-sm ${isCloudActive ? 'border-brand text-brand' : ''}`}
+                onClick={onOpenCloud}
+                title="Configuración de base de datos en la nube (Supabase)"
+              >
+                {isCloudActive ? <Cloud className="w-4 h-4 text-brand" /> : <CloudOff className="w-4 h-4 text-muted" />}
+                <span className="hidden md:inline">{isCloudActive ? 'Nube Conectada' : 'Nube'}</span>
+              </button>
+
+              <button
+                className="btn btn-sm"
+                onClick={toggleTheme}
+                title={theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+                aria-label="Cambiar tema claro / oscuro"
+              >
+                {theme === 'dark' ? <Sun className="w-4 h-4 text-warn" /> : <Moon className="w-4 h-4 text-brand" />}
+              </button>
+            </div>
           </div>
         </div>
+
         <nav role="tablist" aria-label="Módulos" className="flex overflow-x-auto -mb-px">
           {TABS.map(([k, n], i) => (
             <button
@@ -690,18 +824,46 @@ function Header({ tab, setTab }) {
   );
 }
 
-function Sidebar({ state, setActive, addP }) {
+function Sidebar({ state, setActive, addP, onExportJson, onImportJson, onOpenCloud, isCloudActive }) {
+  const [search, setSearch] = useState('');
+  const fileInputRef = useRef(null);
+
+  const filteredPatients = useMemo(() => {
+    if (!search.trim()) return state.patients;
+    const q = search.toLowerCase();
+    return state.patients.filter(p =>
+      (p.gen.nombre && p.gen.nombre.toLowerCase().includes(q)) ||
+      (p.gen.expediente && p.gen.expediente.toLowerCase().includes(q)) ||
+      (p.gen.dx && p.gen.dx.toLowerCase().includes(q))
+    );
+  }, [state.patients, search]);
+
   return (
     <aside className="no-print min-w-0">
       <div className="card p-3">
         <div className="flex items-center justify-between mb-2">
           <span className="eyebrow">Pacientes ({state.patients.length})</span>
+          <span className={`pill text-[10px] ${isCloudActive ? 'ok' : 'na'}`}>
+            {isCloudActive ? '☁ Sincronizado' : 'Local'}
+          </span>
         </div>
+
+        <div className="relative mb-2">
+          <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted" />
+          <input
+            className="inp text-xs pl-8 py-1.5"
+            placeholder="Buscar por nombre o exp..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+        </div>
+
         <button className="btn btn-primary w-full mb-3" onClick={addP}>
           <Plus className="w-4 h-4 mr-1" /> Nuevo paciente
         </button>
-        <ul className="grid gap-1.5 max-h-[22rem] overflow-y-auto">
-          {state.patients.map(x => {
+
+        <ul className="grid gap-1.5 max-h-[19rem] overflow-y-auto mb-3">
+          {filteredPatients.map(x => {
             const act = x.id === state.activeId;
             return (
               <li key={x.id}>
@@ -716,14 +878,41 @@ function Sidebar({ state, setActive, addP }) {
                 >
                   <div className="text-sm font-medium truncate">{x.gen.nombre || 'Paciente sin nombre'}</div>
                   <div className="text-xs text-muted truncate">
-                    {[x.gen.edad && x.gen.edad + ' años', x.gen.sexo === 'M' ? 'Masculino' : x.gen.sexo === 'F' ? 'Femenino' : '', x.ejemplo ? 'ejemplo' : ''].filter(Boolean).join(' · ') || 'Sin datos'}
+                    {[x.gen.expediente && `Exp: ${x.gen.expediente}`, x.gen.edad && `${x.gen.edad} a`, x.gen.sexo === 'M' ? 'M' : x.gen.sexo === 'F' ? 'F' : ''].filter(Boolean).join(' · ') || 'Sin datos'}
                   </div>
                 </button>
               </li>
             );
           })}
+          {filteredPatients.length === 0 && (
+            <li className="text-xs text-muted p-2 text-center">No se encontraron pacientes.</li>
+          )}
         </ul>
-        <p className="hint mt-3">Los pacientes se guardan solo en este navegador. Los dos primeros son ejemplos que puede editar o eliminar.</p>
+
+        {/* Respaldo y Nube */}
+        <div className="pt-3 border-t border-line grid gap-1.5">
+          <div className="eyebrow mb-1 text-[10px]">Copia de Seguridad</div>
+          <div className="grid grid-cols-2 gap-1.5">
+            <button className="btn btn-sm text-xs justify-start" onClick={onExportJson} title="Descargar todos los pacientes en un archivo JSON">
+              <Download className="w-3.5 h-3.5" /> Exportar
+            </button>
+            <button className="btn btn-sm text-xs justify-start" onClick={() => fileInputRef.current?.click()} title="Importar pacientes desde un archivo JSON">
+              <Upload className="w-3.5 h-3.5" /> Importar
+            </button>
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={onImportJson}
+              accept=".json"
+              className="hidden"
+            />
+          </div>
+
+          <button className="btn btn-sm text-xs justify-center mt-1 border-dashed" onClick={onOpenCloud}>
+            <Database className="w-3.5 h-3.5 text-brand" />
+            <span>Gestionar Nube / Supabase</span>
+          </button>
+        </div>
       </div>
     </aside>
   );
@@ -740,7 +929,7 @@ function TabPaciente({ removeP }) {
           <Field label="Nombre completo" className="sm:col-span-2"><In path="gen.nombre" /></Field>
           <Field label="Edad"><In path="gen.edad" num unit="años" /></Field>
           <Field label="Sexo"><Sel path="gen.sexo" options={[['', 'Seleccione'], ['F', 'Femenino'], ['M', 'Masculino']]} /></Field>
-          <Field label="Fecha de consulta"><In path="gen.fecha" type="date" /></Field>
+          <Field label="Fecha de consulta"><In path="gen.fecha" type="date"/></Field>
           <Field label="No. de expediente"><In path="gen.expediente" /></Field>
           <Field label="Diagnóstico médico" className="sm:col-span-2"><In path="gen.dx" /></Field>
           <Field label="Motivo de consulta" className="sm:col-span-2"><Area path="gen.motivo" rows={2} /></Field>
@@ -839,8 +1028,9 @@ function SubA() {
           <Metric label="Peso ajustado" value={f1(c.pAj)} unit="kg" note="Ideal + 25 % del exceso; igual al real si está bajo el ideal" />
           <Metric label="Cintura" value={f1(c.cintura)} unit="cm" flag={c.cinturaCl} />
           <Metric label="Índice cintura/cadera" value={f2(c.icc)} flag={c.iccCl} />
-          <Metric label="Circunferencia muscular del brazo" value={f1(c.cmb)} unit="cm" note="Brazo − π × pliegue tricipital" />
-          <Metric label="Área muscular del brazo" value={f1(c.amb)} unit="cm²" />
+          <Metric label="Circunferencia muscular del brazo (CMB)" value={f1(c.cmb)} unit="cm" note="Brazo − π × pliegue tricipital" />
+          <Metric label="Área muscular del brazo (AMB)" value={f1(c.amb)} unit="cm²" note="Fórmula clásica no corregida" />
+          <Metric label="AMB corregida (AMBc Heymsfield)" value={f1(c.ambc)} unit="cm²" note={c.sexo ? (c.sexo === 'M' ? 'AMB − 10 cm² (descuenta hueso en hombres)' : 'AMB − 6.5 cm² (mujeres)') : 'Requiere sexo'} />
           <Metric label="Grasa corporal estimada" value={f1(c.gc)} unit="%" note={c.mg != null ? `Masa grasa ${f1(c.mg)} kg · masa libre ${f1(c.mlg)} kg` : 'Requiere los 4 pliegues, edad y sexo'} />
         </section>
       </div>
@@ -851,44 +1041,73 @@ function SubA() {
 function SubB() {
   const { p, c, set } = useCtx();
   return (
-    <section className="card p-5">
-      <h3 className="h3">Parámetros bioquímicos</h3>
-      <div className="overflow-x-auto">
-        <table className="tbl" style={{ minWidth: '40rem' }}>
-          <thead>
-            <tr>
-              <th>Parámetro</th>
-              <th>Valor</th>
-              <th>Unidad</th>
-              <th>Referencia</th>
-              <th>Interpretación</th>
-            </tr>
-          </thead>
-          <tbody>
-            {c.bio.map(b => (
-              <tr key={b.k}>
-                <td>{b.n}</td>
-                <td style={{ width: '7.5rem' }}>
-                  <input
-                    id={'f-bio-' + b.k}
-                    className="inp num"
-                    inputMode="decimal"
-                    value={p.bio[b.k] ?? ''}
-                    onChange={e => set('bio.' + b.k, e.target.value)}
-                    autoComplete="off"
-                    aria-label={b.n}
-                  />
-                </td>
-                <td className="text-muted">{b.u}</td>
-                <td className="num text-muted whitespace-nowrap">{b.ref}</td>
-                <td>{b.flag ? <Pill f={b.flag} /> : <span className="text-muted text-xs">Sin dato</span>}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+    <div className="grid gap-4">
+      {/* Tarjetas de cálculo clínico avanzado: TFG y Calcio Corregido */}
+      <div className="grid gap-4 sm:grid-cols-2">
+        <section className="card p-4 border-l-4" style={{ borderLeftColor: c.egfrFlag ? 'var(--' + c.egfrFlag.level + ')' : 'var(--line)' }}>
+          <div className="eyebrow mb-1">Tasa de Filtración Glomerular Estimada (CKD-EPI 2021)</div>
+          <div className="flex items-baseline gap-2">
+            <span className="num text-2xl font-semibold">{c.egfr != null ? f1(c.egfr) : '—'}</span>
+            <span className="text-xs text-muted">mL/min/1.73 m²</span>
+            {c.egfrFlag && <Pill f={c.egfrFlag} />}
+          </div>
+          <div className="text-xs text-muted mt-1">
+            {c.egfrStage || 'Requiere creatinina sérica, edad y sexo del paciente.'}
+          </div>
+        </section>
+
+        <section className="card p-4 border-l-4" style={{ borderLeftColor: c.caCorregidoFlag ? 'var(--' + c.caCorregidoFlag.level + ')' : 'var(--line)' }}>
+          <div className="eyebrow mb-1">Calcio Corregido por Albúmina</div>
+          <div className="flex items-baseline gap-2">
+            <span className="num text-2xl font-semibold">{c.caCorregido != null ? f1(c.caCorregido) : '—'}</span>
+            <span className="text-xs text-muted">mg/dL</span>
+            {c.caCorregidoFlag && <Pill f={c.caCorregidoFlag} />}
+          </div>
+          <div className="text-xs text-muted mt-1">
+            {c.caCorregido != null ? 'Fórmula de Payne: Ca + 0.8 × (4.0 − Albúmina).' : 'Requiere calcio y albúmina sérica.'}
+          </div>
+        </section>
       </div>
-      <p className="hint">Rangos de referencia generales para adultos. Verifique los valores del laboratorio que procesó la muestra. La albúmina refleja sobre todo inflamación, por lo que no debe usarse sola para diagnosticar desnutrición.</p>
-    </section>
+
+      <section className="card p-5">
+        <h3 className="h3">Parámetros bioquímicos</h3>
+        <div className="overflow-x-auto">
+          <table className="tbl" style={{ minWidth: '42rem' }}>
+            <thead>
+              <tr>
+                <th>Parámetro</th>
+                <th>Valor</th>
+                <th>Unidad</th>
+                <th>Referencia</th>
+                <th>Interpretación</th>
+              </tr>
+            </thead>
+            <tbody>
+              {c.bio.map(b => (
+                <tr key={b.k}>
+                  <td>{b.n}</td>
+                  <td style={{ width: '7.5rem' }}>
+                    <input
+                      id={'f-bio-' + b.k}
+                      className="inp num"
+                      inputMode="decimal"
+                      value={p.bio[b.k] ?? ''}
+                      onChange={e => set('bio.' + b.k, e.target.value)}
+                      autoComplete="off"
+                      aria-label={b.n}
+                    />
+                  </td>
+                  <td className="text-muted">{b.u}</td>
+                  <td className="num text-muted whitespace-nowrap">{b.ref}</td>
+                  <td>{b.flag ? <Pill f={b.flag} /> : <span className="text-muted text-xs">Sin dato</span>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="hint mt-3">Rangos de referencia generales para adultos. Se incluye Fósforo, Magnesio y PCR para monitoreo nutricional de inflamación y síndrome de realimentación.</p>
+      </section>
+    </div>
   );
 }
 
@@ -897,6 +1116,21 @@ function SubC() {
   const t = c.tamizaje;
   return (
     <div className="grid gap-4">
+      {c.refeeding.isRisk && (
+        <div className="card p-4 bg-crit-soft border border-crit rounded-lg flex items-start gap-3">
+          <AlertTriangle className="w-5 h-5 text-crit flex-shrink-0 mt-0.5" />
+          <div className="text-sm">
+            <div className="font-semibold text-crit">Alerta Clínica: Alto Riesgo de Síndrome de Realimentación (NICE / ASPEN)</div>
+            <p className="mt-1 text-ink">
+              Factores de riesgo detectados: <strong>{c.refeeding.reasons.join('; ')}</strong>.
+            </p>
+            <div className="mt-2 text-xs text-muted">
+              Recomendación: Iniciar alimentación a 10–15 kcal/kg/día, suplementar tiamina antes de los hidratos de carbono y vigilar fósforo, potasio y magnesio cada 12–24 horas.
+            </div>
+          </div>
+        </div>
+      )}
+
       <section className="card p-5">
         <h3 className="h3">Síntomas digestivos</h3>
         <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
@@ -953,7 +1187,7 @@ function SubC() {
 }
 
 function SubD() {
-  const { c } = useCtx();
+  const { p, c } = useCtx();
   return (
     <div className="grid gap-4">
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]">
@@ -1133,6 +1367,18 @@ function TabReq() {
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)]">
       <div className="grid gap-4 content-start">
+        {c.refeeding.isRisk && (
+          <div className="card p-4 bg-warn-soft border border-warn rounded-lg flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-warn flex-shrink-0 mt-0.5" />
+            <div className="text-sm">
+              <div className="font-semibold text-warn">Precaución: Manejo de Realimentación sugerido</div>
+              <p className="mt-1">
+                Para prevenir el Síndrome de Realimentación, se aconseja pautar inicialmente entre <strong>10 y 15 kcal/kg/día</strong> (aprox. {f0(c.wCalc * 12)} kcal/día) con bajo aporte de carbohidratos simples y progresión gradual cada 48-72 h.
+              </p>
+            </div>
+          </div>
+        )}
+
         <section className="card p-5">
           <h3 className="h3">Gasto energético</h3>
           <div className="grid gap-4 sm:grid-cols-2">
@@ -1736,6 +1982,9 @@ function TabReporte() {
         <button className="btn btn-primary" onClick={copy}>
           <Copy className="w-4 h-4 mr-1" /> Copiar informe como texto
         </button>
+        <button className="btn" onClick={() => window.print()}>
+          Imprimir / Guardar como PDF
+        </button>
         {state && <span className="text-sm text-muted" role="status">{state}</span>}
       </div>
       {txt && (
@@ -1790,11 +2039,22 @@ function TabReporte() {
               <div className="text-sm"><span className="num">{c.cintura != null ? f1(c.cintura) + ' cm' : '—'}{c.icc != null ? ' · ' + f2(c.icc) : ''}</span> <Pill f={c.cinturaCl} /></div>
             </div>
             <KV k="Brazo (CMB / AMB)" v={c.cmb != null ? `${f1(c.cmb)} cm / ${f1(c.amb)} cm²` : ''} />
+            <KV k="AMB corregida (Heymsfield)" v={c.ambc != null ? `${f1(c.ambc)} cm²` : '—'} />
             <KV k="Grasa corporal estimada" v={c.gc != null ? `${f1(c.gc)} % (${f1(c.mg)} kg)` : ''} />
           </div>
         </section>
         <section>
           <h4>B. Bioquímica</h4>
+          <div className="grid gap-3 sm:grid-cols-2 mb-3">
+            <div className="border border-line rounded p-2.5">
+              <div className="eyebrow" style={{ fontSize: '.64rem' }}>TFG Estimada (CKD-EPI 2021)</div>
+              <div className="text-sm font-medium">{c.egfr != null ? `${f1(c.egfr)} mL/min/1.73m² · ${c.egfrStage}` : 'Sin datos de creatinina/edad'}</div>
+            </div>
+            <div className="border border-line rounded p-2.5">
+              <div className="eyebrow" style={{ fontSize: '.64rem' }}>Calcio Corregido (Payne)</div>
+              <div className="text-sm font-medium">{c.caCorregido != null ? `${f1(c.caCorregido)} mg/dL · ${c.caCorregidoFlag.label}` : 'Sin datos de calcio/albúmina'}</div>
+            </div>
+          </div>
           {bs.length ? (
             <div className="overflow-x-auto">
               <table className="tbl" style={{ minWidth: '34rem' }}>
@@ -1823,7 +2083,7 @@ function TabReporte() {
           )}
         </section>
         <section>
-          <h4>C. Clínica</h4>
+          <h4>C. Clínica y Seguridad</h4>
           <div className="grid gap-4 sm:grid-cols-2">
             <KV k="Síntomas digestivos" v={lab(p.clin.sint, SINT).join(', ') || 'Ninguno referido'} />
             <KV k="Patologías coexistentes" v={lab(p.clin.pat, PATOL).join(', ') || 'Ninguna registrada'} />
@@ -1836,6 +2096,11 @@ function TabReporte() {
               </div>
             </div>
           </div>
+          {c.refeeding.isRisk && (
+            <div className="mt-3 p-3 bg-crit-soft border border-crit rounded text-xs text-crit">
+              <strong>Alerta Clínica:</strong> Paciente con riesgo de Síndrome de Realimentación ({c.refeeding.reasons.join('; ')}).
+            </div>
+          )}
         </section>
         <section>
           <h4>D. Dietética</h4>
@@ -1909,7 +2174,7 @@ function TabReporte() {
                   ))}
                 </tbody>
               </table>
-              <p className="hint">Fibra sugerida {f0(c.fibra)} g/día{c.liquidos ? ` · Líquidos ${f0(c.liquidos)} mL/día` : ''}</p>
+              <p className="hint">Fibra sugerida {f0(c.fibra)} g/día{c.liquidos ? ` · Líquidos ${f0(c.liquidos)} mL/día`: ''}</p>
             </div>
           )}
         </section>
@@ -1981,10 +2246,198 @@ function TabReporte() {
   );
 }
 
+// Modal de Base de Datos en la Nube (Supabase)
+function CloudModal({ isOpen, onClose, patients, onPatientsUpdated }) {
+  const [config, setConfig] = useState(getCloudConfig);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState(null);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState(null);
+  const [showSql, setShowSql] = useState(false);
+  const [copiedSql, setCopiedSql] = useState(false);
+
+  if (!isOpen) return null;
+
+  const handleSave = () => {
+    saveCloudConfig(config);
+    setTestResult({ success: true, message: 'Configuración guardada en este navegador.' });
+  };
+
+  const handleTest = async () => {
+    saveCloudConfig(config);
+    setTesting(true);
+    setTestResult(null);
+    const res = await testCloudConnection();
+    setTesting(false);
+    if (res.success) {
+      setTestResult({ success: true, message: '¡Conexión exitosa con la base de datos Supabase!' });
+    } else {
+      setTestResult({ success: false, message: res.error, needTable: res.needTable });
+    }
+  };
+
+  const handlePush = async () => {
+    saveCloudConfig(config);
+    setSyncing(true);
+    setSyncMessage(null);
+    const res = await syncAllPatientsToCloud(patients);
+    setSyncing(false);
+    if (res.success) {
+      setSyncMessage({ success: true, text: `¡Se subieron ${res.count} pacientes a Supabase!` });
+    } else {
+      setSyncMessage({ success: false, text: `Error al subir: ${res.error}` });
+    }
+  };
+
+  const handlePull = async () => {
+    saveCloudConfig(config);
+    setSyncing(true);
+    setSyncMessage(null);
+    const res = await fetchAllPatientsFromCloud();
+    setSyncing(false);
+    if (res.success) {
+      if (res.patients.length > 0) {
+        onPatientsUpdated(res.patients);
+        setSyncMessage({ success: true, text: `¡Se descargaron ${res.patients.length} pacientes desde Supabase!` });
+      } else {
+        setSyncMessage({ success: false, text: 'No hay pacientes guardados en la base de datos en la nube.' });
+      }
+    } else {
+      setSyncMessage({ success: false, text: `Error al descargar: ${res.error}` });
+    }
+  };
+
+  const copySql = () => {
+    navigator.clipboard.writeText(SQL_SETUP_SCRIPT);
+    setCopiedSql(true);
+    setTimeout(() => setCopiedSql(false), 2500);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+      <div className="card max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto shadow-2xl">
+        <div className="flex items-center justify-between pb-3 mb-4 border-b border-line">
+          <div className="flex items-center gap-2">
+            <Database className="w-5 h-5 text-brand" />
+            <h3 className="h3 mb-0">Base de Datos en la Nube (Supabase)</h3>
+          </div>
+          <button className="btn btn-sm p-1" onClick={onClose} aria-label="Cerrar">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <p className="text-xs text-muted mb-4">
+          Conecta tu proyecto con una base de datos PostgreSQL gratuita en <strong>Supabase</strong> para que tus pacientes se sincronicen en tiempo real y no dependan únicamente del almacenamiento local del navegador.
+        </p>
+
+        <div className="grid gap-3 mb-4">
+          <Field label="URL del Proyecto Supabase" hint="Ejemplo: https://xyzcompany.supabase.co">
+            <input
+              className="inp text-sm"
+              placeholder="https://TU_PROYECTO.supabase.co"
+              value={config.url}
+              onChange={e => setConfig({ ...config, url: e.target.value })}
+            />
+          </Field>
+
+          <Field label="Supabase Anon / Public Key" hint="Encuéntrala en Supabase > Project Settings > API > Project API Keys > anon public">
+            <input
+              type="password"
+              className="inp text-sm"
+              placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+              value={config.key}
+              onChange={e => setConfig({ ...config, key: e.target.value })}
+            />
+          </Field>
+
+          <div className="flex flex-wrap gap-2 pt-1">
+            <button className="btn btn-primary btn-sm" onClick={handleTest} disabled={testing || !config.url || !config.key}>
+              {testing ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Activity className="w-3.5 h-3.5" />}
+              Probar conexión
+            </button>
+            <button className="btn btn-sm" onClick={handleSave}>Guardar credenciales</button>
+          </div>
+
+          {testResult && (
+            <div className={`p-3 rounded text-xs ${testResult.success ? 'bg-ok-soft text-ok' : 'bg-crit-soft text-crit'}`}>
+              {testResult.message}
+            </div>
+          )}
+        </div>
+
+        {/* Acciones de Sincronización */}
+        <div className="p-3 bg-sunken rounded-md border border-line mb-4">
+          <div className="eyebrow mb-2">Acciones de Sincronización</div>
+          <div className="flex flex-wrap gap-2">
+            <button className="btn btn-sm btn-primary flex-1" onClick={handlePush} disabled={syncing || !config.url || !config.key}>
+              <Upload className="w-3.5 h-3.5" /> Subir ({patients.length}) a la nube
+            </button>
+            <button className="btn btn-sm flex-1" onClick={handlePull} disabled={syncing || !config.url || !config.key}>
+              <Download className="w-3.5 h-3.5" /> Descargar de la nube
+            </button>
+          </div>
+
+          {syncMessage && (
+            <div className={`mt-2 p-2 rounded text-xs ${syncMessage.success ? 'bg-ok-soft text-ok' : 'bg-crit-soft text-crit'}`}>
+              {syncMessage.text}
+            </div>
+          )}
+        </div>
+
+        {/* Script SQL para crear tabla */}
+        <div className="border-t border-line pt-3">
+          <button
+            className="text-xs text-brand flex items-center justify-between w-full font-medium"
+            onClick={() => setShowSql(!showSql)}
+          >
+            <span>¿Primera vez configurando Supabase? Ver script SQL</span>
+            <span>{showSql ? '− Ocultar' : '+ Mostrar'}</span>
+          </button>
+
+          {showSql && (
+            <div className="mt-2">
+              <p className="text-[11px] text-muted mb-2">
+                Copia y pega este script en el menú <strong>SQL Editor</strong> de tu panel de Supabase y presiona "Run":
+              </p>
+              <pre className="p-2.5 rounded bg-surface border border-line text-[11px] overflow-x-auto num max-h-36">
+                {SQL_SETUP_SCRIPT}
+              </pre>
+              <button className="btn btn-sm text-xs mt-2 w-full" onClick={copySql}>
+                {copiedSql ? <CheckIcon className="w-3.5 h-3.5 text-ok" /> : <Copy className="w-3.5 h-3.5" />}
+                {copiedSql ? '¡Copiado al portapapeles!' : 'Copiar Script SQL'}
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div className="mt-5 text-right">
+          <button className="btn btn-sm" onClick={onClose}>Cerrar</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [state, setState] = useState(loadState);
   const [tab, setTab] = useState('paciente');
   const [sub, setSub] = useState('A');
+  const [theme, setTheme] = useState(() => {
+    return localStorage.getItem(THEME_KEY) || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  });
+  const [isCloudOpen, setIsCloudOpen] = useState(false);
+  const isCloudActive = isCloudConfigured();
+
+  // Gestión del tema (Modo claro / oscuro)
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem(THEME_KEY, theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme(prev => prev === 'dark' ? 'light' : 'dark');
+  };
+
   const p = state.patients.find(x => x.id === state.activeId) || state.patients[0];
 
   useEffect(() => {
@@ -2003,11 +2456,13 @@ export default function App() {
   const set = useCallback((path, val) => upd(x => setIn(x, path, val)), [upd]);
   const c = useMemo(() => calc(p), [p]);
   const setActive = id => setState(s => ({ ...s, activeId: id }));
+
   const addP = () => {
     const b = blankPatient();
     setState(s => ({ patients: [...s.patients, b], activeId: b.id }));
     setTab('paciente');
   };
+
   const removeP = () => setState(s => {
     const rest = s.patients.filter(x => x.id !== s.activeId);
     if (!rest.length) {
@@ -2017,13 +2472,81 @@ export default function App() {
     return { patients: rest, activeId: rest[0].id };
   });
 
+  // Exportar respaldo JSON
+  const handleExportJson = () => {
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(state, null, 2));
+    const downloadAnchor = document.createElement('a');
+    downloadAnchor.setAttribute("href", dataStr);
+    downloadAnchor.setAttribute("download", `nutriclinica_respaldo_${today()}.json`);
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
+  };
+
+  // Importar respaldo JSON
+  const handleImportJson = e => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      try {
+        const parsed = JSON.parse(ev.target.result);
+        if (parsed && Array.isArray(parsed.patients) && parsed.patients.length) {
+          const validPatients = parsed.patients.map(x => merge(blankPatient(), x));
+          setState({
+            patients: validPatients,
+            activeId: validPatients.some(x => x.id === parsed.activeId) ? parsed.activeId : validPatients[0].id
+          });
+          alert(`¡Respaldo importado exitosamente con ${validPatients.length} pacientes!`);
+        } else if (Array.isArray(parsed) && parsed.length) {
+          const validPatients = parsed.map(x => merge(blankPatient(), x));
+          setState({
+            patients: validPatients,
+            activeId: validPatients[0].id
+          });
+          alert(`¡Respaldo importado exitosamente con ${validPatients.length} pacientes!`);
+        } else {
+          alert('El archivo JSON no contiene una estructura válida de pacientes.');
+        }
+      } catch (err) {
+        alert('Error al leer el archivo JSON: ' + err.message);
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
+  // Cuando se sincroniza desde Supabase
+  const handlePatientsFromCloud = cloudPatients => {
+    const valid = cloudPatients.map(x => merge(blankPatient(), x));
+    setState(s => ({
+      patients: valid,
+      activeId: valid.some(x => x.id === s.activeId) ? s.activeId : valid[0].id
+    }));
+  };
+
   const ctx = useMemo(() => ({ p, c, set, upd }), [p, c, set, upd]);
 
   return (
     <Ctx.Provider value={ctx}>
-      <Header tab={tab} setTab={setTab} />
-      <div className="mx-auto max-w-[1400px] px-4 sm:px-6 py-5 grid gap-5 lg:grid-cols-[15.5rem_minmax(0,1fr)]">
-        <Sidebar state={state} setActive={setActive} addP={addP} />
+      <Header
+        tab={tab}
+        setTab={setTab}
+        theme={theme}
+        toggleTheme={toggleTheme}
+        onOpenCloud={() => setIsCloudOpen(true)}
+        isCloudActive={isCloudActive}
+      />
+      <div className="mx-auto max-w-[1400px] px-4 sm:px-6 py-5 grid gap-5 lg:grid-cols-[16.5rem_minmax(0,1fr)]">
+        <Sidebar
+          state={state}
+          setActive={setActive}
+          addP={addP}
+          onExportJson={handleExportJson}
+          onImportJson={handleImportJson}
+          onOpenCloud={() => setIsCloudOpen(true)}
+          isCloudActive={isCloudActive}
+        />
         <main className="min-w-0" key={p.id}>
           {tab === 'paciente' && <TabPaciente removeP={removeP} />}
           {tab === 'valoracion' && <TabValoracion sub={sub} setSub={setSub} />}
@@ -2031,9 +2554,16 @@ export default function App() {
           {tab === 'pes' && <TabPES />}
           {tab === 'plan' && <TabPlan />}
           {tab === 'reporte' && <TabReporte />}
-          <p className="hint mt-6 no-print">Herramienta de apoyo para profesionales de la nutrición. Los cálculos son orientativos y no reemplazan el juicio clínico.</p>
+          <p className="hint mt-6 no-print">Herramienta de apoyo para profesionales de la nutrición clínica. Los cálculos son orientativos y no reemplazan el juicio clínico.</p>
         </main>
       </div>
+
+      <CloudModal
+        isOpen={isCloudOpen}
+        onClose={() => setIsCloudOpen(false)}
+        patients={state.patients}
+        onPatientsUpdated={handlePatientsFromCloud}
+      />
     </Ctx.Provider>
   );
 }
