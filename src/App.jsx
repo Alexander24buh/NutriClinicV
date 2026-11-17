@@ -7,17 +7,15 @@ import {
   getCloudConfig, saveCloudConfig, isCloudConfigured, testCloudConnection,
   syncAllPatientsToCloud, fetchAllPatientsFromCloud, SQL_SETUP_SCRIPT
 } from './lib/supabase.js';
+import {
+  EXCHANGE_GROUPS, MEAL_TIMES, generateMealMenuFromExchanges
+} from './data/exchangeDatabase.js';
+import ExchangePlanSection from './components/ExchangePlanSection.jsx';
 
 // ==== LOGIC START ====
 const KEY = 'nutriclinica.v1';
 const THEME_KEY = 'nutriclinica_theme';
-const MEALS = [
-  ['des', 'Desayuno'],
-  ['c1', 'Colación AM'],
-  ['alm', 'Almuerzo'],
-  ['c2', 'Colación PM'],
-  ['cen', 'Cena']
-];
+const MEALS = MEAL_TIMES.map(m => [m.k, m.n]);
 const RECALL = [...MEALS, ['noc', 'Otros / nocturno']];
 const uid = () => Math.random().toString(36).slice(2, 10);
 const pad2 = n => String(n).padStart(2, '0');
@@ -106,16 +104,14 @@ const ACT = [['res', 'Sin factor de actividad', 1.0], ['sed', 'Sedentario', 1.2]
 const EST = [['none', 'Sin estrés metabólico', 1.0], ['cirm', 'Cirugía menor o electiva', 1.1], ['canc', 'Cáncer o inflamación crónica', 1.2], ['frac', 'Fractura o trauma menor', 1.25], ['sepsis', 'Infección grave o sepsis', 1.3], ['trau', 'Politrauma o TCE', 1.4], ['quem', 'Quemaduras moderadas', 1.5], ['custom', 'Personalizado', null]];
 const PRESETS = [{ n: 'Balanceada 15/55/30', p: 15, c: 55, l: 30 }, { n: 'Hiperproteica 25/45/30', p: 25, c: 45, l: 30 }, { n: 'Control glucémico 20/45/35', p: 20, c: 45, l: 35 }];
 
-const GRUPOS = [
-  { k: 'cer', n: 'Cereales y tubérculos', p: 2, c: 15, l: 0 },
-  { k: 'ver', n: 'Verduras', p: 2, c: 4, l: 0 },
-  { k: 'fru', n: 'Frutas', p: 0, c: 15, l: 0 },
-  { k: 'leg', n: 'Leguminosas', p: 8, c: 20, l: 1 },
-  { k: 'aoa', n: 'Origen animal, bajo aporte de grasa', p: 7, c: 0, l: 3 },
-  { k: 'lac', n: 'Lácteos descremados', p: 9, c: 12, l: 2 },
-  { k: 'gra', n: 'Grasas sin proteína', p: 0, c: 0, l: 5 },
-  { k: 'azu', n: 'Azúcares sin grasa', p: 0, c: 10, l: 0 },
-];
+const GRUPOS = EXCHANGE_GROUPS.map(g => ({
+  k: g.k,
+  n: g.n,
+  p: g.p,
+  c: g.cho,
+  l: g.l,
+  kcal: g.kcal
+}));
 const PROBLEMAS = [
   ['Ingesta', ['Ingesta deficiente de energía', 'Ingesta excesiva de energía', 'Ingesta oral inadecuada', 'Ingesta inadecuada de líquidos', 'Ingesta inadecuada de proteína', 'Ingesta excesiva de proteína', 'Ingesta excesiva de carbohidratos', 'Ingesta excesiva de grasa', 'Ingesta inadecuada de fibra', 'Ingesta excesiva de sodio', 'Ingesta excesiva de alcohol', 'Aumento de las necesidades de energía o nutrientes']],
   ['Clínico', ['Dificultad para deglutir', 'Dificultad para masticar', 'Alteración de la función gastrointestinal', 'Alteración de valores de laboratorio relacionados con la nutrición', 'Interacción alimento-medicamento', 'Bajo peso', 'Pérdida de peso involuntaria', 'Sobrepeso', 'Obesidad', 'Ganancia de peso involuntaria', 'Desnutrición', 'Utilización alterada de nutrientes']],
@@ -158,7 +154,9 @@ const gv = (p, g) => {
     return n == null ? g[f] : n;
   };
   const P = pick('p'), C = pick('c'), L = pick('l');
-  return { P, C, L, kcal: 4 * P + 4 * C + 9 * L };
+  const hasCustom = (o.p !== undefined && o.p !== '') || (o.c !== undefined && o.c !== '') || (o.l !== undefined && o.l !== '');
+  const kcal = hasCustom ? (4 * P + 4 * C + 9 * L) : (g.kcal ?? (4 * P + 4 * C + 9 * L));
+  return { P, C, L, kcal };
 };
 
 function planTotals(p) {
@@ -459,31 +457,61 @@ function suggestPlan(o) {
   const m = o.macros;
   if (!m) return null;
   const kc = o.vct;
-  const fixed = { ver: kc >= 2200 ? 4 : 3, fru: kc < 1400 ? 2 : 3, leg: 1, lac: 1, azu: 0 };
-  const gd = k => GRUPOS.find(g => g.k === k);
-  let Pf = 0, Cf = 0, Lf = 0;
-  for (const k in fixed) {
-    const g = gd(k);
-    Pf += fixed[k] * g.p;
-    Cf += fixed[k] * g.c;
-    Lf += fixed[k] * g.l;
-  }
-  const cer = Math.max(0, round05((m.c.g - Cf) / 15));
-  const aoa = Math.max(0, round05((m.p.g - Pf - cer * 2) / 7));
-  const gra = Math.max(0, round05((m.l.g - Lf - aoa * 3) / 5));
-  const tot = { cer, ver: fixed.ver, fru: fixed.fru, leg: fixed.leg, aoa, lac: fixed.lac, gra, azu: 0 };
-  const W = {
-    cer: [.25, .1, .3, .1, .25],
-    ver: [.1, 0, .45, 0, .45],
-    fru: [.3, .3, .1, .3, 0],
-    leg: [.3, 0, .4, 0, .3],
-    aoa: [.2, 0, .45, 0, .35],
-    lac: [.5, 0, 0, .5, 0],
-    gra: [.25, 0, .4, 0, .35],
-    azu: [0, 0, 0, 0, 0]
+  const leche_sd = kc >= 1800 ? 2 : 1;
+  const veg_sa = kc >= 2000 ? 4 : 3;
+  const frutas = kc >= 1800 ? 3 : 2;
+
+  const choStep1 = leche_sd * 12 + veg_sa * 5 + frutas * 15;
+  const pStep1 = leche_sd * 8 + veg_sa * 2;
+  const lStep1 = leche_sd * 5;
+
+  const almidones = Math.max(1, Math.round(Math.max(0, m.c.g - choStep1) / 15));
+  const pCum2 = pStep1 + almidones * 3;
+  const lCum2 = lStep1 + almidones * 1;
+
+  const totalProt = Math.max(1, Math.round(Math.max(0, m.p.g - pCum2) / 7));
+  const prot_sm = Math.min(totalProt, Math.max(1, Math.floor(totalProt * 0.5)));
+  const prot_magra = Math.max(0, totalProt - prot_sm);
+
+  const lCum3 = lCum2 + prot_magra * 2 + prot_sm * 5;
+  const grasas = Math.max(0, Math.round(Math.max(0, m.l.g - lCum3) / 5));
+
+  const tot = {
+    incaparina: 0,
+    leche_dc: 0,
+    leche_sd,
+    leche_entera: 0,
+    veg_sa,
+    frutas,
+    almidones,
+    otros_cho: 0,
+    prot_magra,
+    prot_sm,
+    prot_grasa: 0,
+    grasas,
+    alcohol: 0
   };
+
+  const W = {
+    incaparina: [0.5, 0.25, 0, 0, 0.25],
+    leche_dc: [0.45, 0.15, 0, 0.15, 0.25],
+    leche_sd: [0.45, 0.15, 0, 0.15, 0.25],
+    leche_entera: [0.5, 0.2, 0, 0, 0.3],
+    veg_sa: [0.25, 0, 0.45, 0, 0.30],
+    frutas: [0.30, 0.35, 0, 0.35, 0],
+    almidones: [0.32, 0.07, 0.31, 0.07, 0.23],
+    otros_cho: [0.3, 0.3, 0.2, 0.2, 0],
+    prot_magra: [0.25, 0, 0.45, 0, 0.30],
+    prot_sm: [0.35, 0, 0.35, 0, 0.30],
+    prot_grasa: [0.4, 0, 0.3, 0, 0.3],
+    grasas: [0.35, 0.05, 0.32, 0.05, 0.23],
+    alcohol: [0, 0, 0.5, 0, 0.5]
+  };
+
   const eq = {};
-  for (const k in tot) eq[k] = split05(tot[k], W[k]).map(x => x ? String(x) : '');
+  for (const k in tot) {
+    eq[k] = split05(tot[k], W[k]).map(x => x ? String(x) : '');
+  }
   return eq;
 }
 
@@ -497,7 +525,7 @@ const blankPatient = () => ({
   dieta: { rec: {}, ingesta: '', kcalEst: '', protEst: '', agua: '', alcohol: '', tabaco: '', suplementos: '', alergias: '', apetito: '', actividad: '', frec: {}, notas: '' },
   req: { formula: 'mifflin', pesoBase: 'real', kcalkg: '30', actKey: 'sed', actVal: '1.2', estKey: 'none', estVal: '1', ajuste: '0', modo: 'pct', pct: { p: '15', c: '55', l: '30' }, gkg: { p: '1', c: '4', l: '1' }, liq: '30' },
   pes: { items: [] },
-  plan: { eq: {}, vals: {}, menu: {}, objetivos: '', recs: '', indicadores: '', proxima: '', seg: [] },
+  plan: { totals: {}, eq: {}, vals: {}, menu: {}, objetivos: '', recs: '', indicadores: '', proxima: '', seg: [] },
 });
 
 function seedPatients() {
@@ -542,7 +570,38 @@ function seedPatients() {
     },
     plan: { objetivos: 'Frenar la pérdida de peso, cubrir al menos el 90 % de los requerimientos y controlar potasio y fósforo.', recs: 'Fraccionar la alimentación en 5 o 6 tiempos pequeños.\nAcompañar cada tiempo principal con una fuente de proteína de alto valor biológico.\nLimitar alimentos ricos en potasio y fósforo según indicación del nefrólogo.\nRegistrar peso y glucosa capilar y llevar el registro a la siguiente consulta.', indicadores: 'Peso, ingesta (recordatorio), albúmina, potasio, fósforo y hemoglobina.', proxima: '2026-10-27' }
   });
+  b.plan.eq = suggestPlan(calc(b));
   return [a, b];
+}
+
+function migrateLegacyPlan(pt) {
+  const eq = pt.plan && pt.plan.eq;
+  if (!eq) return pt;
+  const legacyMap = {
+    cer: 'almidones',
+    ver: 'veg_sa',
+    fru: 'frutas',
+    aoa: 'prot_magra',
+    lac: 'leche_sd',
+    gra: 'grasas',
+    azu: 'otros_cho'
+  };
+  let migrated = false;
+  const newEq = { ...eq };
+  for (const oldK in legacyMap) {
+    if (Array.isArray(eq[oldK]) && eq[oldK].some(Boolean)) {
+      const newK = legacyMap[oldK];
+      if (!newEq[newK] || !newEq[newK].some(Boolean)) {
+        newEq[newK] = eq[oldK];
+      }
+      delete newEq[oldK];
+      migrated = true;
+    }
+  }
+  if (migrated) {
+    return { ...pt, plan: { ...pt.plan, eq: newEq } };
+  }
+  return pt;
 }
 
 function loadState() {
@@ -551,7 +610,7 @@ function loadState() {
     if (raw) {
       const s = JSON.parse(raw);
       if (s && Array.isArray(s.patients) && s.patients.length) {
-        const patients = s.patients.map(x => merge(blankPatient(), x));
+        const patients = s.patients.map(x => migrateLegacyPlan(merge(blankPatient(), x)));
         return { patients, activeId: patients.some(x => x.id === s.activeId) ? s.activeId : patients[0].id };
       }
     }
@@ -1715,19 +1774,12 @@ function Spark({ pts }) {
 
 function TabPlan() {
   const { p, c, set, upd } = useCtx();
-  const T = c.plan;
-  const m = c.macros;
   const [seg, setSeg] = useState({ fecha: today(), peso: '', nota: '' });
   const addRec = t => {
     const cur = (p.plan.recs || '').trim();
     if (cur.split('\n').includes(t)) return;
     set('plan.recs', (cur ? cur + '\n' : '') + t);
   };
-  const sug = () => {
-    const e = suggestPlan(c);
-    if (e) set('plan.eq', e);
-  };
-  const clear = () => set('plan.eq', {});
   const addSeg = () => {
     if (!num(seg.peso)) return;
     upd(x => setIn(x, 'plan.seg', [...x.plan.seg, { id: uid(), ...seg }].sort((a, b) => a.fecha < b.fecha ? -1 : 1)));
@@ -1735,132 +1787,26 @@ function TabPlan() {
   };
   const delSeg = id => upd(x => setIn(x, 'plan.seg', x.plan.seg.filter(s => s.id !== id)));
   const pts = p.plan.seg.map(s => ({ t: new Date(s.fecha + 'T00:00:00').getTime(), y: num(s.peso), f: s.fecha })).filter(q => q.y != null && Number.isFinite(q.t));
-  const stat = (a, t) => {
-    if (!t || a == null) return null;
-    const d = (a / t - 1) * 100;
-    return Math.abs(d) <= 5 ? lv('ok', 'En meta', '✓') : Math.abs(d) <= 10 ? lv('warn', d > 0 ? 'Sobre la meta' : 'Bajo la meta', d > 0 ? '↑' : '↓') : lv('crit', d > 0 ? 'Sobre la meta' : 'Bajo la meta', d > 0 ? '↑' : '↓');
-  };
-  const tgt = [['Energía', T.tot.kcal, c.vct, 'kcal'], ['Proteínas', T.tot.P, m && m.p.g, 'g'], ['Carbohidratos', T.tot.C, m && m.c.g, 'g'], ['Lípidos', T.tot.L, m && m.l.g, 'g']];
 
   return (
-    <div className="grid gap-4">
-      <section className="card p-5">
-        <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
-          <div>
-            <h2 className="h2" style={{ marginBottom: '.2rem' }}>Distribución de equivalentes por tiempo de comida</h2>
-            <p className="hint" style={{ margin: 0 }}>Valores por equivalente tipo sistema de intercambios; son editables para ajustarlos a la tabla de composición que use.</p>
-          </div>
-          <div className="flex gap-2">
-            <button className="btn btn-primary" disabled={!m} style={{ opacity: m ? 1 : 0.5 }} onClick={sug}>Sugerir distribución</button>
-            <button className="btn" onClick={clear}>Limpiar</button>
-          </div>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="tbl" style={{ minWidth: '58rem' }}>
-            <thead>
-              <tr>
-                <th className="stick">Grupo</th>
-                <th className="r">kcal</th>
-                <th className="r">P</th>
-                <th className="r">CHO</th>
-                <th className="r">L</th>
-                {MEALS.map(([k, n]) => <th key={k} style={{ textAlign: 'center' }}>{n}</th>)}
-                <th className="r">Total eq.</th>
-                <th className="r">kcal</th>
-              </tr>
-            </thead>
-            <tbody>
-              {T.rows.map(r => (
-                <tr key={r.g.k}>
-                  <td className="stick" style={{ minWidth: '12rem' }}>{r.g.n}</td>
-                  <td className="r num text-muted">{f0(r.v.kcal)}</td>
-                  {['p', 'c', 'l'].map(f => (
-                    <td key={f} className="r">
-                      <input
-                        aria-label={r.g.n + ' ' + f}
-                        className="inp inp-sm"
-                        inputMode="decimal"
-                        value={(p.plan.vals[r.g.k] || {})[f] ?? ''}
-                        placeholder={String(r.g[f])}
-                        onChange={e => set('plan.vals.' + r.g.k + '.' + f, e.target.value)}
-                      />
-                    </td>
-                  ))}
-                  {MEALS.map(([mk, mn], i) => (
-                    <td key={mk} style={{ textAlign: 'center' }}>
-                      <input
-                        aria-label={r.g.n + ' ' + mn}
-                        className="inp inp-sm"
-                        inputMode="decimal"
-                        value={(p.plan.eq[r.g.k] || [])[i] ?? ''}
-                        onChange={e => set('plan.eq.' + r.g.k + '.' + i, e.target.value)}
-                      />
-                    </td>
-                  ))}
-                  <td className="r num">{r.tot ? r.tot : '—'}</td>
-                  <td className="r num">{r.tot ? f0(r.kcal) : '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-            <tfoot>
-              <tr>
-                <td className="stick" style={{ background: 'var(--sunken)' }}>Aporte por tiempo (kcal)</td>
-                <td /><td /><td /><td />
-                {T.meal.map((x, i) => <td key={i} style={{ textAlign: 'center' }} className="num">{x.kcal ? f0(x.kcal) : '—'}</td>)}
-                <td className="r num">{T.tot.eq || '—'}</td>
-                <td className="r num">{f0(T.tot.kcal)}</td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-        <p className="hint">Columnas P, CHO y L: gramos por equivalente (el valor sugerido aparece tenue). La distribución sugerida es una referencia: adáptela a la patología, por ejemplo restringiendo potasio y fósforo en enfermedad renal.</p>
-      </section>
+    <div className="grid gap-5">
+      {/* Modelo de Cálculo de Intercambios, Distribución por Tiempos y Sugerencias de Alimentos */}
+      <ExchangePlanSection p={p} c={c} set={set} upd={upd} Pill={Pill} />
+
       <div className="grid gap-4 lg:grid-cols-2">
         <section className="card p-5">
-          <h3 className="h3">Plan frente a la meta</h3>
-          <div className="overflow-x-auto">
-            <table className="tbl" style={{ minWidth: '26rem' }}>
-              <thead>
-                <tr>
-                  <th>Nutriente</th>
-                  <th className="r">Plan</th>
-                  <th className="r">Meta</th>
-                  <th className="r">Adecuación</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {tgt.map(([n, a, t, u]) => (
-                  <tr key={n}>
-                    <td>{n}</td>
-                    <td className="r num">{T.tot.eq ? f0(a) + ' ' + u : '—'}</td>
-                    <td className="r num">{t ? f0(t) + ' ' + u : '—'}</td>
-                    <td className="r num">{T.tot.eq && t ? f0(a / t * 100) + ' %' : '—'}</td>
-                    <td>{T.tot.eq ? <Pill f={stat(a, t)} /> : null}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <h3 className="h3">Objetivos del plan</h3>
+          <Area path="plan.objetivos" rows={5} placeholder="Metas de peso, control metabólico y plazos" />
         </section>
         <section className="card p-5">
-          <h3 className="h3">Objetivos del plan</h3>
-          <Area path="plan.objetivos" rows={4} placeholder="Metas de peso, control metabólico y plazos" />
+          <h3 className="h3">Recomendaciones personalizadas</h3>
+          <Area path="plan.recs" rows={5} placeholder="Una recomendación por línea" />
+          <div className="flex flex-wrap gap-1.5 mt-3">
+            {REC_SUG.map(t => <button key={t} className="chipbtn" onClick={() => addRec(t)}>{t}</button>)}
+          </div>
         </section>
       </div>
-      <section className="card p-5">
-        <h3 className="h3">Ejemplo de menú por tiempo de comida</h3>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {MEALS.map(([k, n]) => <Field key={k} label={n}><Area path={'plan.menu.' + k} rows={3} /></Field>)}
-        </div>
-      </section>
-      <section className="card p-5">
-        <h3 className="h3">Recomendaciones personalizadas</h3>
-        <Area path="plan.recs" rows={5} placeholder="Una recomendación por línea" />
-        <div className="flex flex-wrap gap-1.5 mt-3">
-          {REC_SUG.map(t => <button key={t} className="chipbtn" onClick={() => addRec(t)}>{t}</button>)}
-        </div>
-      </section>
+
       <section className="card p-5">
         <h3 className="h3">Seguimiento</h3>
         <div className="grid gap-4 sm:grid-cols-2 mb-5">
