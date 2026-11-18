@@ -15,6 +15,24 @@ const f0 = n => n == null || !Number.isFinite(n) ? '—' : Math.round(n).toLocal
 const f1 = n => n == null || !Number.isFinite(n) ? '—' : n.toFixed(1);
 const f2 = n => n == null || !Number.isFinite(n) ? '—' : n.toFixed(2);
 
+// Sanitiza entradas numéricas positivas (evita letras, signos negativos y caracteres inválidos)
+const sanitizePositiveDecimal = (raw) => {
+  if (raw === null || raw === undefined || raw === '') return '';
+  const str = String(raw).replace(',', '.');
+  const cleaned = str.replace(/[^0-9.]/g, '');
+  const parts = cleaned.split('.');
+  const normalized = parts.length > 2 ? parts[0] + '.' + parts.slice(1).join('') : cleaned;
+  const n = parseFloat(normalized);
+  if (Number.isFinite(n) && n < 0) return '0';
+  return normalized;
+};
+
+const preventInvalidNumKeys = (e) => {
+  if (['-', '+', 'e', 'E'].includes(e.key)) {
+    e.preventDefault();
+  }
+};
+
 // Reparte un total de intercambios en los 5 tiempos según pesos (permite medios intercambios 0.5 o enteros)
 function splitExchanges(total, weights, allowHalf = false) {
   const factor = allowHalf ? 2 : 1;
@@ -70,7 +88,7 @@ export default function ExchangePlanSection({ p, c, set, upd, Pill }) {
   };
 
   const setGroupTotal = (gk, val) => {
-    set('plan.totals.' + gk, val);
+    set('plan.totals.' + gk, sanitizePositiveDecimal(val));
   };
 
   // Cálculos paso a paso idénticos a la tabla de Excel
@@ -527,11 +545,11 @@ export default function ExchangePlanSection({ p, c, set, upd, Pill }) {
         </div>
 
         {/* TABLA 1: CÁLCULO DE INTERCAMBIOS PASO A PASO (IDÉNTICA AL EXCEL) */}
-        <div className="overflow-x-auto border border-line rounded-lg">
-          <table className="tbl" style={{ minWidth: '48rem' }}>
+        <div className="table-responsive">
+          <table className="tbl" style={{ minWidth: '50rem' }}>
             <thead>
               <tr className="bg-sunken">
-                <th>Lista de alimentos</th>
+                <th className="stick">Lista de alimentos</th>
                 <th style={{ width: '9rem', textAlign: 'center' }}>N° de intercambios</th>
                 <th className="r">CHO gr</th>
                 <th className="r">CHON gr</th>
@@ -546,13 +564,17 @@ export default function ExchangePlanSection({ p, c, set, upd, Pill }) {
                 const row = excelCalc.byGroup[g.k];
                 return (
                   <tr key={g.k}>
-                    <td className="font-medium">{g.n}</td>
+                    <td className="stick font-medium" style={{ minWidth: '12rem' }}>{g.n}</td>
                     <td style={{ textAlign: 'center' }}>
                       <input
+                        type="number"
+                        min="0"
+                        step="0.5"
                         className="inp inp-sm"
                         inputMode="decimal"
                         placeholder="0"
                         value={getGroupTotalRaw(g.k)}
+                        onKeyDown={preventInvalidNumKeys}
                         onChange={e => setGroupTotal(g.k, e.target.value)}
                         aria-label={`Intercambios de ${g.n}`}
                       />
@@ -566,7 +588,7 @@ export default function ExchangePlanSection({ p, c, set, upd, Pill }) {
                 );
               })}
               <tr style={{ background: 'var(--sunken)', fontWeight: 600 }}>
-                <td>TOTAL (Lácteos, Vegetales y Frutas)</td>
+                <td className="stick" style={{ background: 'var(--sunken)' }}>TOTAL (Lácteos, Vegetales y Frutas)</td>
                 <td style={{ textAlign: 'center' }} className="num">{f1(excelCalc.step1.nInt)}</td>
                 <td className="r num">{f1(excelCalc.step1.cho)}</td>
                 <td className="r num">{f1(excelCalc.step1.p)}</td>
@@ -582,13 +604,17 @@ export default function ExchangePlanSection({ p, c, set, upd, Pill }) {
                 const row = excelCalc.byGroup[g.k];
                 return (
                   <tr key={g.k}>
-                    <td className="font-medium">{g.n}</td>
+                    <td className="stick font-medium" style={{ minWidth: '12rem' }}>{g.n}</td>
                     <td style={{ textAlign: 'center' }}>
                       <input
+                        type="number"
+                        min="0"
+                        step="0.5"
                         className="inp inp-sm"
                         inputMode="decimal"
                         placeholder="0"
                         value={getGroupTotalRaw(g.k)}
+                        onKeyDown={preventInvalidNumKeys}
                         onChange={e => setGroupTotal(g.k, e.target.value)}
                         aria-label={`Intercambios de ${g.n}`}
                       />
@@ -602,7 +628,7 @@ export default function ExchangePlanSection({ p, c, set, upd, Pill }) {
                 );
               })}
               <tr style={{ background: 'var(--sunken)', fontWeight: 600 }}>
-                <td>TOTAL Acumulado (con Almidones)</td>
+                <td className="stick" style={{ background: 'var(--sunken)' }}>TOTAL Acumulado (con Almidones)</td>
                 <td style={{ textAlign: 'center' }} className="num">{f1(excelCalc.step2Only.nInt)}</td>
                 <td className="r num">{f1(excelCalc.cumStep2.cho)}</td>
                 <td className="r num">{f1(excelCalc.cumStep2.p)}</td>
@@ -618,13 +644,17 @@ export default function ExchangePlanSection({ p, c, set, upd, Pill }) {
                 const row = excelCalc.byGroup[g.k];
                 return (
                   <tr key={g.k}>
-                    <td className="font-medium">{g.n}</td>
+                    <td className="stick font-medium" style={{ minWidth: '12rem' }}>{g.n}</td>
                     <td style={{ textAlign: 'center' }}>
                       <input
+                        type="number"
+                        min="0"
+                        step="0.5"
                         className="inp inp-sm"
                         inputMode="decimal"
                         placeholder="0"
                         value={getGroupTotalRaw(g.k)}
+                        onKeyDown={preventInvalidNumKeys}
                         onChange={e => setGroupTotal(g.k, e.target.value)}
                         aria-label={`Intercambios de ${g.n}`}
                       />
@@ -638,7 +668,7 @@ export default function ExchangePlanSection({ p, c, set, upd, Pill }) {
                 );
               })}
               <tr style={{ background: 'var(--sunken)', fontWeight: 600 }}>
-                <td>TOTAL Acumulado (con Proteínas)</td>
+                <td className="stick" style={{ background: 'var(--sunken)' }}>TOTAL Acumulado (con Proteínas)</td>
                 <td style={{ textAlign: 'center' }} className="num">{f1(excelCalc.step3Only.nInt)}</td>
                 <td className="r num">{f1(excelCalc.cumStep3.cho)}</td>
                 <td className="r num">{f1(excelCalc.cumStep3.p)}</td>
@@ -654,13 +684,17 @@ export default function ExchangePlanSection({ p, c, set, upd, Pill }) {
                 const row = excelCalc.byGroup[g.k];
                 return (
                   <tr key={g.k}>
-                    <td className="font-medium">{g.n}</td>
+                    <td className="stick font-medium" style={{ minWidth: '12rem' }}>{g.n}</td>
                     <td style={{ textAlign: 'center' }}>
                       <input
+                        type="number"
+                        min="0"
+                        step="0.5"
                         className="inp inp-sm"
                         inputMode="decimal"
                         placeholder="0"
                         value={getGroupTotalRaw(g.k)}
+                        onKeyDown={preventInvalidNumKeys}
                         onChange={e => setGroupTotal(g.k, e.target.value)}
                         aria-label={`Intercambios de ${g.n}`}
                       />
@@ -676,7 +710,7 @@ export default function ExchangePlanSection({ p, c, set, upd, Pill }) {
             </tbody>
             <tfoot>
               <tr style={{ background: 'var(--brand-soft)' }}>
-                <td className="font-bold">TOTAL GENERAL DEL PLAN</td>
+                <td className="stick font-bold" style={{ background: 'var(--brand-soft)' }}>TOTAL GENERAL DEL PLAN</td>
                 <td style={{ textAlign: 'center' }} className="num font-bold">{f1(excelCalc.totalGeneral.nInt)}</td>
                 <td className="r num font-bold">{f1(excelCalc.totalGeneral.cho)} g</td>
                 <td className="r num font-bold">{f1(excelCalc.totalGeneral.p)} g</td>
@@ -687,7 +721,7 @@ export default function ExchangePlanSection({ p, c, set, upd, Pill }) {
                 </td>
               </tr>
               <tr>
-                <td>% de adecuación</td>
+                <td className="stick">Porcentaje de adecuación</td>
                 <td style={{ textAlign: 'center' }} className="text-xs text-muted">Meta: 100%</td>
                 <td className="r">{adequacyBadge(excelCalc.adecCho)}</td>
                 <td className="r">{adequacyBadge(excelCalc.adecChon)}</td>
@@ -696,7 +730,7 @@ export default function ExchangePlanSection({ p, c, set, upd, Pill }) {
                 <td className="r text-xs text-muted">Rango clínico</td>
               </tr>
               <tr>
-                <td className="text-xs text-muted">Rango de margen de error</td>
+                <td className="stick text-xs text-muted">Rango de margen de error</td>
                 <td />
                 <td className="r text-xs text-muted num">95 – 105%</td>
                 <td className="r text-xs text-muted num">95 – 105%</td>
@@ -731,7 +765,7 @@ export default function ExchangePlanSection({ p, c, set, upd, Pill }) {
           </button>
         </div>
 
-        <div className="overflow-x-auto border border-line rounded-lg">
+        <div className="table-responsive">
           <table className="tbl" style={{ minWidth: '64rem' }}>
             <thead>
               <tr className="bg-sunken">
@@ -782,11 +816,15 @@ export default function ExchangePlanSection({ p, c, set, upd, Pill }) {
                         <React.Fragment key={mt.k}>
                           <td style={{ textAlign: 'center', borderLeft: '1px solid var(--line)' }}>
                             <input
+                              type="number"
+                              min="0"
+                              step="0.5"
                               className="inp inp-sm"
                               inputMode="decimal"
                               placeholder="0"
                               value={valStr}
-                              onChange={e => set(`plan.eq.${r.g.k}.${mIdx}`, e.target.value)}
+                              onKeyDown={preventInvalidNumKeys}
+                              onChange={e => set(`plan.eq.${r.g.k}.${mIdx}`, sanitizePositiveDecimal(e.target.value))}
                               aria-label={`${r.g.n} en ${mt.n}`}
                             />
                           </td>

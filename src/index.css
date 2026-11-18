@@ -367,6 +367,16 @@ textarea.inp {
   color: var(--brand);
 }
 
+.table-responsive {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
 .tbl {
   width: 100%;
   border-collapse: collapse;
@@ -397,13 +407,21 @@ textarea.inp {
 
 .tbl .r {
   text-align: right;
+  white-space: nowrap;
 }
 
 .tbl .stick {
   position: sticky;
   left: 0;
   background: var(--surface);
-  z-index: 1;
+  z-index: 2;
+  box-shadow: 1px 0 0 var(--line);
+}
+
+.tbl thead .stick,
+.tbl tfoot .stick {
+  background: var(--sunken);
+  z-index: 3;
 }
 
 .tbl tfoot td {
@@ -461,28 +479,67 @@ textarea.inp {
 }
 
 @media print {
-  :root {
-    --bg: #fff;
-    --surface: #fff;
-    --sunken: #f3f6f6;
-    --ink: #111;
-    --muted: #444;
-    --line: #bbb;
-    --brand: #0b6277;
-    --ok: #1b7550;
-    --warn: #8f5b00;
-    --crit: #ac2e28;
-    --low: #2557a7;
-    --ok-soft: #fff;
-    --warn-soft: #fff;
-    --crit-soft: #fff;
-    --low-soft: #fff;
-    --brand-soft: #fff;
+  @page {
+    size: letter portrait;
+    margin: 12mm;
+  }
+  :root,
+  :root[data-theme="dark"],
+  :root[data-theme="light"] {
+    color-scheme: light !important;
+    --bg: #ffffff !important;
+    --surface: #ffffff !important;
+    --sunken: #f4f7f8 !important;
+    --ink: #111111 !important;
+    --muted: #444444 !important;
+    --line: #cccccc !important;
+    --brand: #0b6277 !important;
+    --ok: #1b7550 !important;
+    --warn: #8f5b00 !important;
+    --crit: #ac2e28 !important;
+    --low: #2557a7 !important;
+    --ok-soft: #eef8f3 !important;
+    --warn-soft: #fdf6e9 !important;
+    --crit-soft: #fdedeb !important;
+    --low-soft: #eef3fc !important;
+    --brand-soft: #eef7f9 !important;
+  }
+  body {
+    background: #ffffff !important;
+    color: #111111 !important;
+    font-size: 11pt !important;
   }
   .no-print {
     display: none !important;
   }
+  .print-layout {
+    display: block !important;
+    max-width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
   .paper {
-    border: 0;
+    border: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+  }
+  .rep section {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    margin-bottom: 1rem;
+  }
+  .table-responsive,
+  .overflow-x-auto {
+    overflow: visible !important;
+    border: 0 !important;
+  }
+  .tbl {
+    min-width: 0 !important;
+    width: 100% !important;
+    font-size: 9.5pt !important;
+  }
+  .tbl .stick {
+    position: static !important;
+    box-shadow: none !important;
   }
 }

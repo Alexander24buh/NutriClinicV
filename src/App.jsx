@@ -1,16 +1,18 @@
 import React, { useState, useMemo, useEffect, useCallback, useContext, createContext, useRef } from 'react';
 import {
   Plus, Trash2, Copy, Check as CheckIcon, Sun, Moon, Cloud, CloudOff,
-  Download, Upload, Search, Database, AlertTriangle, RefreshCw, X, ExternalLink, Activity
+  Download, Upload, Search, Database, AlertTriangle, RefreshCw, X, ExternalLink, Activity,
+  FileDown, Printer, CheckCircle2
 } from 'lucide-react';
 import {
   getCloudConfig, saveCloudConfig, isCloudConfigured, testCloudConnection,
-  syncAllPatientsToCloud, fetchAllPatientsFromCloud, SQL_SETUP_SCRIPT
+  savePatientToCloud, syncAllPatientsToCloud, fetchAllPatientsFromCloud, SQL_SETUP_SCRIPT
 } from './lib/supabase.js';
 import {
   EXCHANGE_GROUPS, MEAL_TIMES, generateMealMenuFromExchanges
 } from './data/exchangeDatabase.js';
 import ExchangePlanSection from './components/ExchangePlanSection.jsx';
+import { exportClinicalReportPDF } from './lib/pdfExport.js';
 
 // ==== LOGIC START ====
 const KEY = 'nutriclinica.v1';
@@ -717,18 +719,55 @@ function Field({ label, hint, className = '', children }) {
   );
 }
 
-function In({ path, unit, num: isNum, type, className = '', placeholder }) {
+// Sanitiza entradas numéricas (permite signo negativo solo cuando allowSigned es true, como en req.ajuste)
+const sanitizeNumInput = (raw, allowSigned = false) => {
+  if (raw === null || raw === undefined || raw === '') return '';
+  let str = String(raw).replace(',', '.');
+  if (allowSigned) {
+    const isNeg = str.trim().startsWith('-');
+    const cleaned = str.replace(/[^0-9.]/g, '');
+    const parts = cleaned.split('.');
+    const norm = parts.length > 2 ? parts[0] + '.' + parts.slice(1).join('') : cleaned;
+    return (isNeg ? '-' : '') + norm;
+  }
+  const cleaned = str.replace(/[^0-9.]/g, '');
+  const parts = cleaned.split('.');
+  const norm = parts.length > 2 ? parts[0] + '.' + parts.slice(1).join('') : cleaned;
+  const n = parseFloat(norm);
+  if (Number.isFinite(n) && n < 0) return '0';
+  return norm;
+};
+
+function In({ path, unit, num: isNum, signed, type, className = '', placeholder }) {
   const { p, set } = useCtx();
   const v = getIn(p, path);
+  const allowSigned = Boolean(signed || path === 'req.ajuste');
+
+  const handleChange = e => {
+    const val = isNum ? sanitizeNumInput(e.target.value, allowSigned) : e.target.value;
+    set(path, val);
+  };
+
+  const handleKeyDown = e => {
+    if (isNum) {
+      if (['e', 'E', '+'].includes(e.key) || (!allowSigned && e.key === '-')) {
+        e.preventDefault();
+      }
+    }
+  };
+
   return (
     <div className={'relative ' + className}>
       <input
         id={idOf(path)}
         className={'inp' + (unit ? ' pr' : '')}
         value={v ?? ''}
-        onChange={e => set(path, e.target.value)}
+        onChange={handleChange}
+        onKeyDown={handleKeyDown}
         inputMode={isNum ? 'decimal' : undefined}
-        type={type === 'date' ? 'date' : 'text'}
+        type={type === 'date' ? 'date' : isNum && !allowSigned ? 'number' : 'text'}
+        min={isNum && !allowSigned ? '0' : undefined}
+        step={isNum && !allowSigned ? 'any' : undefined}
         placeholder={placeholder}
         autoComplete="off"
       />
@@ -815,7 +854,43 @@ const TABS = [
   ['reporte', 'Reporte']
 ];
 
-function Header({ tab, setTab, theme, toggleTheme, onOpenCloud, isCloudActive }) {
+function SaveStatusBadge({ saveStatus, lastSavedAt, isCloudActive }) {
+  if (saveStatus === 'saving') {
+    return (
+      <span className="pill warn text-[11px]" role="status">
+        <RefreshCw className="w-3 h-3 animate-spin" /> Guardando cambios...
+      </span>
+    );
+  }
+  if (saveStatus === 'syncing_cloud') {
+    return (
+      <span className="pill low text-[11px]" role="status">
+        <RefreshCw className="w-3 h-3 animate-spin" /> Sincronizando con nube...
+      </span>
+    );
+  }
+  if (saveStatus === 'error') {
+    return (
+      <span className="pill crit text-[11px]" role="status">
+        <AlertTriangle className="w-3 h-3" /> Cambios sin sincronizar en nube
+      </span>
+    );
+  }
+  if (saveStatus === 'saved_cloud' && isCloudActive) {
+    return (
+      <span className="pill ok text-[11px]" role="status" title="Sincronizado en navegador local y base de datos Supabase">
+        <CheckCircle2 className="w-3 h-3" /> Sincronizado en nube{lastSavedAt ? ` · ${lastSavedAt}` : ''}
+      </span>
+    );
+  }
+  return (
+    <span className="pill ok text-[11px]" role="status" title="Datos guardados en el almacenamiento local de este navegador">
+      <CheckCircle2 className="w-3 h-3" /> Guardado localmente{lastSavedAt ? ` · ${lastSavedAt}` : ''}
+    </span>
+  );
+}
+
+function Header({ tab, setTab, theme, toggleTheme, onOpenCloud, isCloudActive, saveStatus, lastSavedAt }) {
   const { p, c } = useCtx();
   return (
     <header className="sticky z-30 bg-surface border-b border-line no-print" style={{ top: 'env(safe-area-inset-top, 0px)' }}>
@@ -823,11 +898,12 @@ function Header({ tab, setTab, theme, toggleTheme, onOpenCloud, isCloudActive })
         <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 py-3">
           <div className="flex items-center gap-3 min-w-0">
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <h1 className="brandname">NutriClínica</h1>
                 <span className="pill ok text-[10px] py-0.5 px-2">v2.0 Clínico</span>
+                <SaveStatusBadge saveStatus={saveStatus} lastSavedAt={lastSavedAt} isCloudActive={isCloudActive} />
               </div>
-              <div className="text-xs text-muted truncate">
+              <div className="text-xs text-muted truncate mt-0.5">
                 {p.gen.nombre || 'Paciente sin nombre'}{p.ejemplo ? ' · ejemplo' : ''}
               </div>
             </div>
@@ -1130,11 +1206,11 @@ function SubB() {
 
       <section className="card p-5">
         <h3 className="h3">Parámetros bioquímicos</h3>
-        <div className="overflow-x-auto">
+        <div className="table-responsive">
           <table className="tbl" style={{ minWidth: '42rem' }}>
             <thead>
               <tr>
-                <th>Parámetro</th>
+                <th className="stick">Parámetro</th>
                 <th>Valor</th>
                 <th>Unidad</th>
                 <th>Referencia</th>
@@ -1144,14 +1220,18 @@ function SubB() {
             <tbody>
               {c.bio.map(b => (
                 <tr key={b.k}>
-                  <td>{b.n}</td>
+                  <td className="stick font-medium">{b.n}</td>
                   <td style={{ width: '7.5rem' }}>
                     <input
                       id={'f-bio-' + b.k}
+                      type="number"
+                      min="0"
+                      step="any"
                       className="inp num"
                       inputMode="decimal"
                       value={p.bio[b.k] ?? ''}
-                      onChange={e => set('bio.' + b.k, e.target.value)}
+                      onKeyDown={e => { if (['-', '+', 'e', 'E'].includes(e.key)) e.preventDefault(); }}
+                      onChange={e => set('bio.' + b.k, sanitizeNumInput(e.target.value, false))}
                       autoComplete="off"
                       aria-label={b.n}
                     />
@@ -1821,7 +1901,17 @@ function TabPlan() {
               </Field>
               <Field label="Peso">
                 <div className="relative">
-                  <input id="seg-peso" className="inp pr" inputMode="decimal" value={seg.peso} onChange={e => setSeg({ ...seg, peso: e.target.value })} />
+                  <input
+                    id="seg-peso"
+                    type="number"
+                    min="0"
+                    step="any"
+                    className="inp pr"
+                    inputMode="decimal"
+                    value={seg.peso}
+                    onKeyDown={e => { if (['-', '+', 'e', 'E'].includes(e.key)) e.preventDefault(); }}
+                    onChange={e => setSeg({ ...seg, peso: sanitizeNumInput(e.target.value, false) })}
+                  />
                   <span className="unit">kg</span>
                 </div>
               </Field>
@@ -1830,7 +1920,7 @@ function TabPlan() {
               </Field>
               <button className="btn btn-primary" onClick={addSeg}>Registrar</button>
             </div>
-            <div className="overflow-x-auto">
+            <div className="table-responsive">
               <table className="tbl" style={{ minWidth: '26rem' }}>
                 <thead>
                   <tr>
@@ -1885,7 +1975,23 @@ function TabReporte() {
   const { p, c } = useCtx();
   const [state, setState] = useState('');
   const [txt, setTxt] = useState(null);
+  const [exportingPdf, setExportingPdf] = useState(false);
   const lab = (map, list) => list.filter(x => map[x[0]]).map(x => x[1]);
+
+  const handleExportPdf = () => {
+    try {
+      setExportingPdf(true);
+      setState('Generando documento PDF estructurado...');
+      exportClinicalReportPDF({ p, c, SINT, PATOL, RECALL, FORMULAS, pesText });
+      setState('✓ PDF clínico descargado correctamente.');
+      setTxt(null);
+    } catch (err) {
+      console.error('Error generando PDF:', err);
+      setState('Error al generar el PDF: ' + (err.message || 'Intente imprimir como PDF.'));
+    } finally {
+      setExportingPdf(false);
+    }
+  };
 
   const copy = async () => {
     const t = reportText(p, c);
@@ -1925,17 +2031,20 @@ function TabReporte() {
   return (
     <div className="grid gap-4">
       <div className="flex flex-wrap items-center gap-3 no-print">
-        <button className="btn btn-primary" onClick={copy}>
-          <Copy className="w-4 h-4 mr-1" /> Copiar informe como texto
+        <button className="btn btn-primary" onClick={handleExportPdf} disabled={exportingPdf}>
+          <FileDown className="w-4 h-4 mr-1" /> {exportingPdf ? 'Generando PDF...' : 'Descargar PDF Clínico'}
         </button>
         <button className="btn" onClick={() => window.print()}>
-          Imprimir / Guardar como PDF
+          <Printer className="w-4 h-4 mr-1" /> Imprimir reporte
         </button>
-        {state && <span className="text-sm text-muted" role="status">{state}</span>}
+        <button className="btn" onClick={copy}>
+          <Copy className="w-4 h-4 mr-1" /> Copiar como texto
+        </button>
+        {state && <span className="text-sm text-brand font-medium" role="status">{state}</span>}
       </div>
       {txt && (
         <textarea
-          className="inp num"
+          className="inp num no-print"
           rows={12}
           readOnly
           value={txt}
@@ -2364,6 +2473,11 @@ function CloudModal({ isOpen, onClose, patients, onPatientsUpdated }) {
   );
 }
 
+const formatTimeHHMM = () => {
+  const d = new Date();
+  return pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+};
+
 export default function App() {
   const [state, setState] = useState(loadState);
   const [tab, setTab] = useState('paciente');
@@ -2372,6 +2486,8 @@ export default function App() {
     return localStorage.getItem(THEME_KEY) || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
   });
   const [isCloudOpen, setIsCloudOpen] = useState(false);
+  const [saveStatus, setSaveStatus] = useState('saved_local');
+  const [lastSavedAt, setLastSavedAt] = useState(formatTimeHHMM);
   const isCloudActive = isCloudConfigured();
 
   // Gestión del tema (Modo claro / oscuro)
@@ -2386,13 +2502,52 @@ export default function App() {
 
   const p = state.patients.find(x => x.id === state.activeId) || state.patients[0];
 
+  // Guardado automático en localStorage y sincronización en segundo plano con Supabase (si está configurada)
   useEffect(() => {
+    setSaveStatus('saving');
     try {
       localStorage.setItem(KEY, JSON.stringify(state));
+      const nowStr = formatTimeHHMM();
+      setLastSavedAt(nowStr);
+      if (!isCloudConfigured()) {
+        setSaveStatus('saved_local');
+        return;
+      }
     } catch (e) {
-      // Ignore
+      setSaveStatus('error');
+      return;
     }
-  }, [state]);
+
+    // Si Supabase está configurado, sincronizar el paciente activo con debounce de 1.2s
+    setSaveStatus('syncing_cloud');
+    const timer = setTimeout(async () => {
+      try {
+        const res = await savePatientToCloud(p);
+        if (res.success) {
+          setLastSavedAt(formatTimeHHMM());
+          setSaveStatus('saved_cloud');
+        } else {
+          setSaveStatus('saved_local');
+        }
+      } catch (err) {
+        setSaveStatus('saved_local');
+      }
+    }, 1200);
+
+    return () => clearTimeout(timer);
+  }, [state, p]);
+
+  // Prevenir cierre accidental de la pestaña si hay un guardado o sincronización en curso
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      if (saveStatus === 'saving' || saveStatus === 'syncing_cloud') {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [saveStatus]);
 
   const upd = useCallback(fn => setState(s => ({
     ...s,
@@ -2482,8 +2637,10 @@ export default function App() {
         toggleTheme={toggleTheme}
         onOpenCloud={() => setIsCloudOpen(true)}
         isCloudActive={isCloudActive}
+        saveStatus={saveStatus}
+        lastSavedAt={lastSavedAt}
       />
-      <div className="mx-auto max-w-[1400px] px-4 sm:px-6 py-5 grid gap-5 lg:grid-cols-[16.5rem_minmax(0,1fr)]">
+      <div className="print-layout mx-auto max-w-[1400px] px-4 sm:px-6 py-5 grid gap-5 lg:grid-cols-[16.5rem_minmax(0,1fr)]">
         <Sidebar
           state={state}
           setActive={setActive}
