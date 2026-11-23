@@ -18,7 +18,7 @@ const MEAL_OPTIONS = [
 
 export default function MedicationsSection({ p, c, set, upd }) {
   const medList = Array.isArray(p.gen?.medList) ? p.gen.medList : [];
-  const medAlerts = c.medAlerts || { byType: { coordinacion: [], cruce_patologia: [], sinergia: [] }, totalAlerts: 0, disclaimer: '' };
+  const medAlerts = (c && c.medAlerts) || { byType: { coordinacion: [], cruce_patologia: [], sinergia: [] }, totalAlerts: 0, disclaimer: '' };
 
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);

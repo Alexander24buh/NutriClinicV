@@ -2,6 +2,12 @@
 // Basado en farmacología clínica nutricional, lineamientos de la RIISS (MINSAL El Salvador),
 // guías KDOQI/KDIGO (Renal), ADA (Diabetes), AHA/ACC (Cardiovascular) e IOM (Gestación).
 
+const num = v => {
+  if (v === null || v === undefined || v === '') return null;
+  const n = parseFloat(String(v).replace(',', '.'));
+  return Number.isFinite(n) ? n : null;
+};
+
 export const MED_CATEGORIES = [
   'Antihipertensivo',
   'Quelante de fósforo',
@@ -209,16 +215,16 @@ export function evaluateMedicationAlerts(p, c) {
   const secondaryDiets = p.plan?.riss?.secondaryDiets || [];
   const allDiets = [primaryDiet, ...secondaryDiets];
 
-  const hasERC = pat.erc || dxText.includes('renal') || dxText.includes('erc') || (c.egfr != null && c.egfr < 60);
+  const hasERC = pat.erc || dxText.includes('renal') || dxText.includes('erc') || (c && c.egfr != null && c.egfr < 60);
   const hasHTA = pat.hta || dxText.includes('hipertens') || dxText.includes('hta');
   const hasDM = pat.dm2 || pat.dm1 || dxText.includes('diabet');
   const hasDislip = pat.dislipidemia || dxText.includes('dislip') || dxText.includes('colesterol');
-  const isEmbarazada = Boolean(c.isEmbarazada || p.gen?.embarazada);
-  const isPediatrico = Boolean(c.isPediatrico);
+  const isEmbarazada = Boolean((c && c.isEmbarazada) || p.gen?.embarazada);
+  const isPediatrico = Boolean(c && c.isPediatrico);
 
   const kLab = num(p.bio?.potasio);
   const pLab = num(p.bio?.fosforo);
-  const caLab = c.caCorregido != null ? c.caCorregido : num(p.bio?.calcio);
+  const caLab = (c && c.caCorregido != null) ? c.caCorregido : num(p.bio?.calcio);
 
   const items = [...medList];
 
