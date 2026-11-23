@@ -1,10 +1,11 @@
 import React, { useState, useMemo } from 'react';
 import {
-  Calculator, Utensils, BookOpen, Sparkles, RefreshCw, Check, Search, ChevronDown, ChevronUp, ArrowRight
+  Calculator, Utensils, BookOpen, Sparkles, RefreshCw, Check, Search, ChevronDown, ChevronUp, ArrowRight, ShieldCheck
 } from 'lucide-react';
 import {
   EXCHANGE_GROUPS, MEAL_TIMES, FOOD_EXCHANGE_CATALOG, generateMealMenuFromExchanges
 } from '../data/exchangeDatabase.js';
+import RissDietCard from './RissDietCard.jsx';
 
 const num = v => {
   if (v === null || v === undefined || v === '') return null;
@@ -413,6 +414,9 @@ export default function ExchangePlanSection({ p, c, set, upd, Pill }) {
 
   return (
     <div className="grid gap-5">
+      {/* 0. PROTOCOLO OBLIGATORIO RISS: DIAGNÓSTICO, CLASIFICACIÓN Y REGLAS DE DIETAS HOSPITALARIAS */}
+      <RissDietCard p={p} c={c} set={set} upd={upd} />
+
       {/* 1. ENCABEZADO Y METAS DE MACRONUTRIENTES (MODELO EXCEL) */}
       <section className="card p-5">
         <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
@@ -888,34 +892,64 @@ export default function ExchangePlanSection({ p, c, set, upd, Pill }) {
 
       {/* 3. SUGERENCIAS AUTOMÁTICAS DE TIEMPOS DE COMIDA RESPETANDO LA LISTA DE INTERCAMBIOS DEL DOCUMENTO */}
       <section className="card p-5">
-        <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+        <div className="flex flex-wrap items-start justify-between gap-3 mb-4 pb-3 border-b border-line">
           <div>
             <div className="flex items-center gap-2">
               <Sparkles className="w-5 h-5 text-brand" />
-              <h2 className="h2 mb-0">3. Sugerencias de Menú por Tiempo de Comida (Listas de Intercambio)</h2>
+              <h2 className="h2 mb-0">3. Sugerencias de Menú en 5 Tiempos de Comida (Listas de Intercambio)</h2>
             </div>
             <p className="hint mt-1">
-              Generadas automáticamente respetando el número exacto de intercambios asignados en cada tiempo y las porciones oficiales del documento <em>Listas de Alimentos para la Diabetes</em>.
+              Generadas automáticamente respetando el número exacto de intercambios asignados, rotando fuentes de proteína (pollo, pescado, claras, requesón) y grasas cardiosaludables (aceite de oliva, aguacate, semillas).
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
-              className="btn btn-sm"
-              onClick={() => setVariantIdx(v => v + 1)}
-              title="Generar otra combinación equivalente de alimentos del documento"
-            >
-              <RefreshCw className="w-3.5 h-3.5" /> Variar opciones de alimentos
-            </button>
-            <button
+              type="button"
               className="btn btn-primary btn-sm"
               onClick={handleApplySuggestedMenuToPatient}
+              title="Copia automáticamente todas las sugerencias de la variante actual al menú final del paciente"
             >
               <Check className="w-3.5 h-3.5" /> Aplicar sugerencias al menú del reporte
             </button>
           </div>
         </div>
 
-        {/* Tarjetas de sugerencia en vivo + edición */}
+        {/* Selector de Variedad de Menú (3 Variantes Rotativas) */}
+        <div className="mb-4 p-3 bg-sunken rounded-lg border border-line flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-ink uppercase tracking-wider">Variante Culinaria:</span>
+            <div className="inline-flex rounded-md shadow-2xs">
+              {[
+                { idx: 0, label: 'Variante 1: Clásica Balanceada' },
+                { idx: 1, label: 'Variante 2: Rotación Proteínas & Grasas' },
+                { idx: 2, label: 'Variante 3: Vegetales Asados & Tubérculos' }
+              ].map(v => (
+                <button
+                  key={v.idx}
+                  type="button"
+                  className={`px-3 py-1.5 text-xs font-semibold transition-all border first:rounded-l-md last:rounded-r-md ${
+                    (variantIdx % 3) === v.idx
+                      ? 'bg-brand text-white border-brand'
+                      : 'bg-surface hover:bg-surface-alt border-line text-ink'
+                  }`}
+                  onClick={() => setVariantIdx(v.idx)}
+                >
+                  {v.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <button
+            type="button"
+            className="btn btn-sm btn-ghost text-xs text-brand flex items-center gap-1"
+            onClick={() => setVariantIdx(v => v + 1)}
+            title="Alternar a la siguiente combinación"
+          >
+            <RefreshCw className="w-3 h-3" /> Rotar siguiente opción
+          </button>
+        </div>
+
+        {/* Tarjetas de sugerencia en vivo + edición para los 5 tiempos */}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {distCalc.mealTotals.map((mt) => {
             const sugText = suggestedMenus[mt.k];

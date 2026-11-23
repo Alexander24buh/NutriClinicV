@@ -1,6 +1,7 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { MEAL_TIMES } from '../data/exchangeDatabase.js';
+import { RISS_DIETS } from '../data/rissDatabase.js';
 
 const num = v => {
   if (v === null || v === undefined || v === '') return null;
@@ -246,8 +247,47 @@ export function exportClinicalReportPDF({ p, c, SINT, PATOL, RECALL, FORMULAS, p
     y = doc.lastAutoTable.finalY + 4;
   }
 
-  // ==== 6. REQUERIMIENTOS ENERGÉTICOS Y MACRONUTRIENTES ====
-  addSectionHeader('6. Prescripción Calórica y Distribución de Macronutrientes');
+  // ==== 6. DIAGNÓSTICO Y CLASIFICACIÓN DE DIETA SEGÚN RISS (MINSAL) ====
+  const rissData = p.plan?.riss;
+  if (rissData) {
+    addSectionHeader('6. Diagnóstico y Clasificación de Dieta según RISS (MINSAL)');
+    const primObj = RISS_DIETS.find(d => d.id === (rissData.primaryDiet || 'normal')) || RISS_DIETS[0];
+    const secObjs = (rissData.secondaryDiets || []).map(id => RISS_DIETS.find(d => d.id === id)).filter(Boolean);
+    const prescrTitle = [primObj.name, ...secObjs.map(s => s.name)].join(' + ');
+    const activeDiets = [primObj, ...secObjs];
+    const allowedSummary = activeDiets.flatMap(d => d.allowed).slice(0, 4).join('; ');
+    const forbiddenSummary = activeDiets.flatMap(d => d.forbidden).slice(0, 4).join('; ');
+
+    autoTable(doc, {
+      startY: y,
+      margin: { left: margin, right: margin },
+      theme: 'grid',
+      styles: { fontSize: 8.2, cellPadding: 2.2, textColor: inkColor, lineColor: [211, 224, 226] },
+      columnStyles: { 0: { cellWidth: 38, fontStyle: 'bold', fillColor: [248, 250, 251] } },
+      body: [
+        [
+          { content: 'Dieta RISS Prescrita:', styles: { fontStyle: 'bold' } },
+          { content: cleanStr(prescrTitle), styles: { fontStyle: 'bold', textColor: brandColor } }
+        ],
+        [
+          { content: 'Justificación Clínica:', styles: { fontStyle: 'bold' } },
+          cleanStr(rissData.justificacion || primObj.description)
+        ],
+        [
+          { content: 'Alimentos Permitidos:', styles: { fontStyle: 'bold', textColor: [16, 120, 70] } },
+          cleanStr(allowedSummary || 'Alimentos según requerimiento individual')
+        ],
+        [
+          { content: 'Restricciones RISS:', styles: { fontStyle: 'bold', textColor: [180, 40, 40] } },
+          cleanStr(forbiddenSummary || 'Sin restricciones severas adicionales')
+        ]
+      ]
+    });
+    y = doc.lastAutoTable.finalY + 4;
+  }
+
+  // ==== 7. REQUERIMIENTOS ENERGÉTICOS Y MACRONUTRIENTES ====
+  addSectionHeader('7. Prescripción Calórica y Distribución de Macronutrientes');
   const F = FORMULAS.find(x => x.k === p.req.formula) || FORMULAS[0];
   const m = c.macros;
 
@@ -294,10 +334,10 @@ export function exportClinicalReportPDF({ p, c, SINT, PATOL, RECALL, FORMULAS, p
     y = doc.lastAutoTable.finalY + 4;
   }
 
-  // ==== 7. PLAN DE INTERCAMBIOS Y DISTRIBUCIÓN POR TIEMPOS DE COMIDA ====
+  // ==== 8. PLAN DE INTERCAMBIOS Y DISTRIBUCIÓN POR TIEMPOS DE COMIDA ====
   const T = c.plan;
   if (T && T.tot && T.tot.eq > 0) {
-    addSectionHeader('7. Distribución de Intercambios por Tiempo de Comida');
+    addSectionHeader('8. Distribución de Intercambios por Tiempo de Comida');
 
     const activeRows = T.rows.filter(r => r.tot > 0);
     const baseVct = c.vct > 0 ? c.vct : (T.tot.kcal || 1);
@@ -351,10 +391,10 @@ export function exportClinicalReportPDF({ p, c, SINT, PATOL, RECALL, FORMULAS, p
     y = doc.lastAutoTable.finalY + 4;
   }
 
-  // ==== 8. MENÚ SUGERIDO Y RECOMENDACIONES ====
+  // ==== 9. MENÚ EN 5 TIEMPOS DE COMIDA Y RECOMENDACIONES ====
   const hasMenu = MEAL_TIMES.some(mt => p.plan?.menu?.[mt.k]);
   if (hasMenu || p.plan?.objetivos || p.plan?.recs) {
-    addSectionHeader('8. Menú por Tiempo de Comida y Recomendaciones');
+    addSectionHeader('9. Menú en 5 Tiempos de Comida y Recomendaciones');
 
     if (p.plan?.objetivos) {
       autoTable(doc, {

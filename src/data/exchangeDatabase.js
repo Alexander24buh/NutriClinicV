@@ -398,190 +398,282 @@ export function generateMealMenuFromExchanges(eqMap, variantIndex = 0) {
     },
     veg_sa: {
       des: [
-        '½ taza de espinacas, tomate y cebolla salteados (1 opc. vegetal S/A)',
-        '1 taza de tomate y pepino fresco en rodajas (1 opc. vegetal S/A)',
-        '½ taza de chirmol / pico de gallo y champiñones (1 opc. vegetal S/A)'
+        '½ taza de espinacas y tomate salteados en rocío vegetal (1 vegetal)',
+        '1 taza de pepino y tomate fresco en rodajas con limón (1 vegetal)',
+        '½ taza de champiñones salteados con cebollín y pimientos (1 vegetal)'
       ],
       c1: [
-        '1 taza de bastones de pepino, apio y zanahoria cruda',
-        '1 taza de jícama y pepino con limón'
+        '1 taza de bastones de pepino y apio fresco con limón (1 vegetal)',
+        '1 taza de jícama y zanahoria rallada fresca (1 vegetal)',
+        '1 taza de tomates cherry y rábano crujiente (1 vegetal)'
       ],
       alm: [
-        '1 taza de ensalada fresca (lechuga, tomate, pepino) o ½ taza de brócoli y calabacín al vapor',
-        '½ taza de ejotes y zanahoria al vapor + ensalada de hojas verdes',
-        '1 taza de ensalada mixta (espinaca, tomate, pimientos) o ½ taza de chayote y coliflor cocidos'
+        '1 taza de ensalada verde (lechuga, pepino, espinaca) + ½ taza de brócoli al vapor (2 vegetales)',
+        '½ taza de ejotes tiernos y zanahoria al vapor + 1 taza de hojas mixtas y tomate (2 vegetales)',
+        '½ taza de calabacitas (zucchini) y berenjena asada a la plancha + 1 taza de ensalada de repollo morado y pepino (2 vegetales)'
       ],
       c2: [
-        '1 taza de pepino y apio fresco',
-        '1 taza de zanahoria y jícama en bastones'
+        '1 taza de pepino con salpicón de limón y hierbabuena (1 vegetal)',
+        '1 taza de apio y zanahoria en bastones (1 vegetal)',
+        '1 taza de jícama en rodajas finas (1 vegetal)'
       ],
       cen: [
-        '½ taza de vegetales cocidos al vapor (calabacín, brócoli o ejotes)',
-        '1 taza de ensalada fresca de lechuga, tomate y pepino',
-        '½ taza de espinacas o acelgas salteadas con tomate'
+        '½ taza de calabacín tierno salteado con tomate y orégano (1 vegetal)',
+        '1 taza de ensalada fresca mixta con vinagre de manzana y pepino (1 vegetal)',
+        '½ taza de chayote y espinacas al vapor (1 vegetal)'
       ]
     },
     frutas: {
       des: [
-        '1 taza de papaya picada en cubos',
-        '1 manzana pequeña (4 oz) o ¾ taza de piña fresca',
-        '1 plátano pequeño (4 oz) o 1¼ taza de fresas enteras'
+        '1 taza de papaya picada en cubos (1 fruta)',
+        '1 manzana pequeña (4 oz) o ¾ taza de piña fresca (1 fruta)',
+        '1 plátano pequeño (4 oz) o 1¼ taza de fresas enteras (1 fruta)'
       ],
       c1: [
-        '1 manzana pequeña (4 oz) sin pelar',
-        '1 naranja mediana o 2 mandarinas pequeñas',
-        '1 taza de melón picado en cubos o 17 uvas pequeñas'
+        '1 manzana pequeña fresca (4 oz) con cáscara (1 fruta)',
+        '1 naranja mediana o 2 mandarinas pequeñas en gajos (1 fruta)',
+        '1 taza de melón picado en cubos o 17 uvas pequeñas (1 fruta)'
       ],
       alm: [
-        '1¼ taza de sandía en cubos o ¾ taza de piña fresca',
-        '1 durazno mediano (6 oz) o ½ mango pequeño',
-        '1 taza de papaya o melón en cubos'
+        '¾ taza de piña fresca picada o 1¼ taza de sandía en cubos (1 fruta)',
+        '1 durazno mediano (6 oz) o ½ mango pequeño en rebanadas (1 fruta)',
+        '1 taza de papaya fresca con unas gotas de limón (1 fruta)'
       ],
       c2: [
-        '1¼ taza de fresas enteras o ½ pera grande (4 oz)',
-        '1 plátano pequeño (4 oz) o 2 guayabas pequeñas',
-        '¾ taza de arándanos o 1 manzana pequeña'
+        '1¼ taza de fresas enteras o ½ pera grande (4 oz) (1 fruta)',
+        '1 banano pequeño (4 oz) o 2 guayabas pequeñas (1 fruta)',
+        '¾ taza de arándanos frescos o 1 manzana pequeña (1 fruta)'
       ],
       cen: [
-        '½ taza de kiwi en rebanadas o 1 manzana pequeña',
-        '1 taza de papaya en cubos'
+        '½ taza de kiwi en rebanadas o 1 manzana verde pequeña cocida (1 fruta)',
+        '1 taza de papaya en cubos frescos (1 fruta)',
+        '¾ taza de melón dulce en cubos (1 fruta)'
       ]
     },
     almidones: {
       des: [
         (n) => {
-          if (n === 1) return '1 tortilla de maíz (6 pulg) o 1 rebanada de pan integral (1 almidón)';
-          if (n === 2) return '2 tortillas de maíz (6 pulg) o ½ taza de avena cocida + 1 rebanada de pan integral (2 almidones)';
-          if (n === 3) return '½ taza de frijoles cocidos (1) + 2 tortillas de maíz (2) [Total: 3 almidones]';
-          if (n === 4) return '½ taza de avena cocida (1) + ½ taza de frijoles (1) + 2 tortillas de maíz (2) [Total: 4 almidones]';
-          if (n === 5) return '½ taza de avena cocida (1) + ½ taza de frijoles (1) + 2 tortillas de maíz (2) + ½ taza de plátano maduro cocido (1) [Total: 5 almidones]';
-          return `${n} opciones de almidón (ej. ½ taza de frijoles + ½ taza de avena + tortillas de maíz o pan integral: 1 reb / 1 tortilla = 1 opción)`;
+          if (n === 1) return '1 tortilla de maíz nixtamalizado (6 pulg) o 1 rebanada de pan integral (1 almidón)';
+          if (n === 2) return '2 tortillas de maíz o 1 taza de avena cocida en agua (2 almidones)';
+          if (n === 3) return '½ taza de frijoles cocidos enteros (1) + 2 tortillas de maíz (2) [Total: 3 almidones]';
+          if (n === 4) return '½ taza de avena cocida (1) + ½ taza de frijoles cocidos (1) + 2 tortillas de maíz (2) [Total: 4 almidones]';
+          if (n === 5) return '½ taza de avena (1) + ½ taza de frijoles (1) + 2 tortillas de maíz (2) + ½ taza de plátano cocido (1) [Total: 5 almidones]';
+          return `${n} opciones de almidón (frijoles cocidos ½ taza = 1, tortillas de maíz = 1 c/u, avena cocida ½ taza = 1)`;
         },
         (n) => {
-          if (n === 1) return '½ taza de avena cocida en agua (1 almidón)';
-          if (n === 2) return '2 rebanadas de pan integral tostado (2 almidones)';
-          if (n === 3) return '1 panqueque de 4 pulg (1) + ½ taza de avena (1) + 1 rebanada de pan integral (1) [Total: 3 almidones]';
-          return `${n} opciones de almidón: ${Math.floor(n / 2)} tortillas de maíz + ½ taza de frijoles cocidos + pan integral`;
+          if (n === 1) return '½ taza de avena cocida con canela en hojuelas (1 almidón)';
+          if (n === 2) return '2 rebanadas de pan de molde integral de masa madre tostado (2 almidones)';
+          if (n === 3) return '1 panqueque de avena mediano (1) + ½ taza de frijoles cocidos (1) + 1 tortilla de maíz (1) [Total: 3 almidones]';
+          if (n >= 4) return `½ taza de avena cocida (1) + ½ taza de frijoles (1) + ${n - 2} tortillas de maíz (${n - 2}) [Total: ${n} almidones]`;
+          return `${n} almidones combinados`;
+        },
+        (n) => {
+          if (n === 1) return '½ taza de plátano macho hervido tierno (1 almidón)';
+          if (n === 2) return '½ taza de plátano hervido (1) + 1 tortilla de maíz (1) [Total: 2 almidones]';
+          if (n === 3) return '½ taza de plátano hervido (1) + ½ taza de frijoles cocidos (1) + 1 tortilla de maíz (1) [Total: 3 almidones]';
+          return `${n} opciones de almidón (plátano hervido, frijoles y tortillas de maíz)`;
         }
       ],
       c1: [
         (n) => n === 1
-          ? '6 galletas de soda (saltinas) o 3 tazas de palomitas de maíz naturales (1 almidón)'
-          : `${n} opciones de almidón (ej. ${n * 3} cuadrados de galleta Graham o ${n} barras de granola de ¾ oz)`,
+          ? '6 galletas de soda / saltinas o 3 tazas de palomitas de maíz sin grasa (1 almidón)'
+          : `${n} opciones de almidón (ej. 5 galletas integrales + 3 tazas de palomitas sin grasa)`,
         (n) => n === 1
           ? '5 galletas de trigo integral horneadas o 2 tortitas de arroz (rice cakes) (1 almidón)'
-          : `${n} opciones de almidón (ej. ½ taza de avena o galletas integrales)`
+          : `${n} opciones de almidón (galletas integrales o tortitas de arroz)`,
+        (n) => n === 1
+          ? '1 barra de granola horneada (¾ oz) o 3 cuadrados de galleta Graham (1 almidón)'
+          : `${n} opciones de almidón horneado`
       ],
       alm: [
         (n) => {
-          if (n === 1) return '⅓ taza de arroz cocido o 1 tortilla de maíz (1 almidón)';
-          if (n === 2) return '⅔ taza de arroz cocido (2 almidones) o ⅓ taza de arroz + 1 tortilla de maíz';
-          if (n === 3) return '⅓ taza de arroz (1) + ½ taza de frijoles cocidos (1) + 1 tortilla de maíz (1) [Total: 3 almidones]';
-          if (n === 4) return '⅔ taza de arroz (2) + ½ taza de frijoles o lentejas (1) + 1 tortilla de maíz (1) [Total: 4 almidones]';
-          if (n === 5) return '⅔ taza de arroz (2) + ½ taza de frijoles (1) + ½ taza de papa o elote cocido (1) + 1 tortilla de maíz (1) [Total: 5 almidones]';
-          return `${n} opciones de almidón (combinar: ⅓ taza de arroz = 1, ½ taza de frijoles/lentejas = 1, ½ taza de papa/camote = 1, 1 tortilla de maíz = 1)`;
+          if (n === 1) return '⅓ taza de arroz blanco o integral cocido (1 almidón)';
+          if (n === 2) return '⅔ taza de arroz integral al vapor (2 almidones)';
+          if (n === 3) return '⅓ taza de arroz cocido (1) + ½ taza de frijoles o lentejas cocidas (1) + 1 tortilla de maíz (1) [Total: 3 almidones]';
+          if (n === 4) return '⅔ taza de arroz cocido (2) + ½ taza de frijoles cocidos (1) + 1 tortilla de maíz (1) [Total: 4 almidones]';
+          if (n === 5) return '⅔ taza de arroz (2) + ½ taza de frijoles (1) + ½ papa hervida (1) + 1 tortilla de maíz (1) [Total: 5 almidones]';
+          return `${n} opciones de almidón (arroz ⅓ tz = 1, frijoles ½ tz = 1, papa ½ tz = 1, tortillas = 1 c/u)`;
         },
         (n) => {
-          if (n <= 2) return `${n === 1 ? '⅓ taza' : '⅔ taza'} de pasta integral o quinua cocida (${n} almidón)`;
-          return `⅔ taza de pasta o arroz integral (2) + ½ taza de garbanzos o lentejas (1) ${n > 3 ? `+ ${n - 3} tortilla(s) de maíz` : ''} [Total: ${n} almidones]`;
+          if (n === 1) return '½ taza de papa cocida al vapor o en puré rústico (1 almidón)';
+          if (n === 2) return '⅓ taza de pasta integral (1) + ½ taza de papa o camote al horno (1) [Total: 2 almidones]';
+          if (n === 3) return '⅓ taza de quinua cocida (1) + ½ taza de garbanzos cocidos (1) + 1 tortilla de maíz (1) [Total: 3 almidones]';
+          if (n >= 4) return `⅔ taza de pasta o quinua cocida (2) + ½ taza de lentejas (1) + ${n - 3} tortilla(s) de maíz [Total: ${n} almidones]`;
+          return `${n} opciones de almidón (papa, quinua o pasta)`;
+        },
+        (n) => {
+          if (n === 1) return '½ taza de camote (batata) al horno (1 almidón)';
+          if (n === 2) return '½ taza de elote en grano cocido (1) + 1 tortilla de maíz (1) [Total: 2 almidones]';
+          if (n === 3) return '½ taza de yuca cocida (1) + ½ taza de frijoles colorados (1) + 1 tortilla de maíz (1) [Total: 3 almidones]';
+          return `${n} almidones (tubérculos y granos cocidos)`;
         }
       ],
       c2: [
         (n) => n === 1
-          ? '3 cuadrados de galletas Graham o 6 galletas de soda / saltinas (1 almidón)'
-          : `${n} opciones de almidón (ej. 1 rebanada de pan integral + 3 tazas de palomitas de maíz sin grasa)`,
+          ? '3 cuadrados de galletas Graham o 6 galletas de soda (1 almidón)'
+          : `${n} opciones de almidón (ej. 1 rebanada de pan integral + 3 tazas de palomitas sin grasa)`,
         (n) => n === 1
-          ? '¾ taza de cereal sin azúcar o ¼ taza de granola (1 almidón)'
-          : `${n} opciones de almidón (galletas integrales o pan tostado)`
+          ? '¾ taza de cereal integral listo para comer sin endulzar (1 almidón)'
+          : `${n} opciones de almidón de cereal integral`,
+        (n) => n === 1
+          ? '2 tortitas de arroz horneadas (rice cakes) o 1 rebanada de pan tostado (1 almidón)'
+          : `${n} opciones de almidón tostado`
       ],
       cen: [
         (n) => {
-          if (n === 1) return '1 tortilla de maíz (6 pulg) o 1 rebanada de pan integral (1 almidón)';
-          if (n === 2) return '2 tortillas de maíz o ½ taza de papa/camote cocido + 1 tortilla (2 almidones)';
+          if (n === 1) return '1 tortilla de maíz caliente (6 pulg) o 1 rebanada de pan integral (1 almidón)';
+          if (n === 2) return '2 tortillas de maíz nixtamalizado o 1 tortilla + ½ taza de frijoles cocidos (2 almidones)';
           if (n === 3) return '½ taza de frijoles cocidos (1) + 2 tortillas de maíz (2) [Total: 3 almidones]';
-          if (n === 4) return '½ taza de frijoles (1) + ½ taza de plátano maduro o papa hervida (1) + 2 tortillas de maíz (2) [Total: 4 almidones]';
-          return `${n} opciones de almidón (ej. ½ taza de frijoles + tortillas de maíz + ⅓ taza de arroz o ½ taza de papa)`;
+          if (n === 4) return '½ taza de frijoles (1) + ½ taza de plátano cocido (1) + 2 tortillas de maíz (2) [Total: 4 almidones]';
+          return `${n} opciones de almidón (frijoles, plátano cocido y tortillas de maíz)`;
+        },
+        (n) => {
+          if (n === 1) return '½ taza de papa cocida al vapor con romero (1 almidón)';
+          if (n === 2) return '½ taza de papa cocida (1) + 1 tortilla de maíz (1) [Total: 2 almidones]';
+          if (n === 3) return '⅓ taza de arroz al vapor (1) + ½ taza de lentejas cocidas (1) + 1 tortilla de maíz (1) [Total: 3 almidones]';
+          return `${n} opciones de almidón (arroz, papa y legumbres)`;
+        },
+        (n) => {
+          if (n === 1) return '1 rebanada de pan integral tostado (1 almidón)';
+          if (n === 2) return '2 rebanadas de pan pita integral (2 almidones)';
+          if (n >= 3) return `2 rebanadas de pan integral (2) + ½ taza de frijoles molidos sin grasa (1) ${n > 3 ? `+ ${n - 3} tortilla` : ''} [Total: ${n} almidones]`;
+          return `${n} opciones de almidón`;
         }
       ]
     },
     prot_magra: {
       des: [
-        (n) => `${n * 2} claras de huevo o ${n} oz de queso fresco bajo en grasa / requesón (${n * 0.25} taza) (${n} prot. magra)`,
-        (n) => `${n} oz de jamón de pavo bajo en grasa o ¼ taza de requesón (cottage) (${n} prot. magra)`
+        (n) => `${n * 2} claras de huevo revueltas o cocidas al vapor (${n} prot. magra)`,
+        (n) => `${n * 0.25} taza (${n} oz) de requesón (cottage) descremado o queso fresco magro (${n} prot. magra)`,
+        (n) => `${n} oz de jamón de pechuga de pavo bajo en sodio a la plancha (${n} prot. magra)`
       ],
-      c1: [(n) => `${n * 0.25} taza de requesón (cottage) bajo en grasa o ${n} oz de jamón de pavo (${n} prot. magra)`],
+      c1: [
+        (n) => `${n * 0.25} taza de requesón descremado o ${n} oz de queso fresco light (${n} prot. magra)`,
+        (n) => `${n} oz de jamón de pavo bajo en grasa con limón (${n} prot. magra)`
+      ],
       alm: [
-        (n) => `${n} oz (${n * 30} g) de pechuga de pollo a la plancha sin piel o filete de pescado al horno (${n} prot. magra)`,
-        (n) => `${n} oz (${n * 30} g) de lomito de res magro asado o atún en agua (${n} prot. magra)`
+        (n) => `${n} oz (${n * 30} g) de pechuga de pollo asada a la plancha con limón y orégano (${n} prot. magra)`,
+        (n) => `${n} oz (${n * 30} g) de filete de pescado blanco (tilapia o corvina) al horno o al papillote con finas hierbas (${n} prot. magra)`,
+        (n) => `${n} oz (${n * 30} g) de atún en agua escurrido o lomo de res magro a la plancha (${n} prot. magra)`
       ],
-      c2: [(n) => `${n} oz de queso fresco light o ¼ taza de requesón (${n} prot. magra)`],
+      c2: [
+        (n) => `${n * 0.25} taza de requesón descremado o ${n} oz de queso fresco bajo en grasa (${n} prot. magra)`,
+        (n) => `${n} oz de atún en agua o claras cocidas (${n} prot. magra)`
+      ],
       cen: [
-        (n) => `${n} oz (${n * 30} g) de filete de pescado / pollo deshebrado o ${n * 2} claras de huevo (${n} prot. magra)`,
-        (n) => `${n} oz (${n * 30} g) de atún en agua o queso fresco bajo en grasa (${n} prot. magra)`
+        (n) => `${n} oz (${n * 30} g) de pechuga de pollo deshebrada tierna salteada con vegetales (${n} prot. magra)`,
+        (n) => `${n} oz (${n * 30} g) de filete de pescado al vapor con ajo y perejil (${n} prot. magra)`,
+        (n) => `${n * 2} claras de huevo en omelette tierno con calabacitas (${n} prot. magra)`
       ]
     },
     prot_sm: {
       des: [
         (n) => n === 1
-          ? '1 huevo entero revuelto o cocido (o 1 oz de queso fresco/mozzarella) (1 prot. SM)'
-          : `${n} huevos enteros (o ${n - 1} huevo + 1 oz de queso fresco/mozzarella) (${n} prot. SM)`,
+          ? '1 huevo entero cocido o revuelto tierno con spray (1 prot. SM)'
+          : `${n} huevos enteros revueltos con mínimo aceite (o ${n - 1} huevo + 1 oz de queso fresco) (${n} prot. SM)`,
+        (n) => `${n} oz (${n * 30} g) de queso fresco desgrasado o quesillo blanco (${n} prot. SM)`,
+        (n) => n === 1 ? '1 huevo poché escalfado en agua con orégano (1 prot. SM)' : `${n} huevos escalfados (${n} prot. SM)`
       ],
-      c1: [(n) => `${n} oz de queso mozzarella o feta (${n} prot. SM)`],
+      c1: [
+        (n) => `${n} oz de queso mozzarella bajo en humedad o queso fresco (${n} prot. SM)`,
+        (n) => `${n} huevo cocido duro con pimienta (1 prot. SM)`
+      ],
       alm: [
-        (n) => `${n} oz (${n * 30} g) de carne de res asada / guisada o pollo (${n} prot. SM)`,
-        (n) => `${n} oz (${n * 30} g) de lomo/chuleta de cerdo o carne molida 85% magra (${n} prot. SM)`
+        (n) => `${n} oz (${n * 30} g) de carne de res magra (lomito / corte magro) a la plancha (${n} prot. SM)`,
+        (n) => `${n} oz (${n * 30} g) de lomo de cerdo magro al horno con hierbas (${n} prot. SM)`,
+        (n) => `${n} oz (${n * 30} g) de pollo horneado sin piel (muslo o pierna desgrasada) (${n} prot. SM)`
       ],
-      c2: [(n) => `${n} huevo duro o ${n} oz de queso mozzarella (${n} prot. SM)`],
+      c2: [
+        (n) => `${n} huevo duro cocido o ${n} oz de queso fresco (${n} prot. SM)`
+      ],
       cen: [
         (n) => n === 1
-          ? '1 huevo entero o 1 oz (30 g) de queso fresco / mozzarella o pollo (1 prot. SM)'
-          : `${n} oz (${n * 30} g) de pollo/res o ${n} huevos enteros (${n} prot. SM)`
+          ? '1 oz (30 g) de queso fresco / quesillo o 1 huevo revuelto tierno (1 prot. SM)'
+          : `${n} oz (${n * 30} g) de pollo a la plancha o ${n} oz de queso fresco (${n} prot. SM)`,
+        (n) => `${n} oz (${n * 30} g) de carne molida 90% magra guisada con tomate (${n} prot. SM)`,
+        (n) => `${n} oz (${n * 30} g) de quesillo suave con frijoles o huevo (${n} prot. SM)`
       ]
     },
     prot_grasa: {
-      des: [(n) => `${n} oz de queso cheddar/suizo o ${n} Cda de mantequilla de maní (${n} prot. grasa)`],
+      des: [
+        (n) => `${n} oz de queso cheddar o suizo (${n} prot. grasa)`,
+        (n) => `${n} Cda de mantequilla de maní natural sin azúcar (${n} prot. grasa)`
+      ],
       c1: [(n) => `${n} Cda de mantequilla de maní o almendra (${n} prot. grasa)`],
-      alm: [(n) => `${n} oz de carne o queso maduro (${n} prot. grasa)`],
-      c2: [(n) => `${n} Cda de mantequilla de maní (${n} prot. grasa)`],
-      cen: [(n) => `${n} oz de queso regular (${n} prot. grasa)`]
+      alm: [(n) => `${n} oz de carne de res con grasa visible o queso maduro (${n} prot. grasa)`],
+      c2: [(n) => `${n} Cda de mantequilla de maní natural (${n} prot. grasa)`],
+      cen: [(n) => `${n} oz de queso madurado (${n} prot. grasa)`]
     },
     grasas: {
       des: [
         (n) => {
-          if (n === 1) return '1 cdta de aceite de oliva/canola o 2 Cdas (1 oz) de aguacate (1 grasa)';
-          if (n === 2) return '1 cdta de aceite para cocinar (1) + 2 Cdas de aguacate (1) [Total: 2 grasas]';
-          if (n === 3) return '1 cdta de aceite (1) + 2 Cdas de aguacate (1) + 6 almendras o 2 Cdas de crema light (1) [Total: 3 grasas]';
-          return `${n} opciones de grasa (ej. 1 cdta de aceite = 1, 2 Cdas de aguacate = 1, 6 almendras = 1)`;
+          if (n === 1) return '1 cdta de aceite de oliva virgen extra en la sartén o 2 Cdas (1 oz) de aguacate fresco (1 grasa)';
+          if (n === 2) return '1 cdta de aceite de oliva en cocción (1) + 2 Cdas de aguacate fresco en rodajas (1) [Total: 2 grasas saludables]';
+          if (n === 3) return '1 cdta de aceite de oliva (1) + 2 Cdas de aguacate (1) + 1 Cda de semillas de chía o linaza molida (1) [Total: 3 grasas]';
+          return `${n} opciones de grasa saludable rotadas (aceite de oliva = 1 cdta, aguacate = 2 Cdas, chía = 1 Cda)`;
+        },
+        (n) => {
+          if (n === 1) return '2 Cdas (1 oz) de aguacate Hass fresco (1 grasa monoinsaturada)';
+          if (n === 2) return '2 Cdas de aguacate (1) + 6 almendras tostadas sin sal (1) [Total: 2 grasas]';
+          if (n >= 3) return `2 Cdas de aguacate (1) + 6 almendras (1) + 1 cdta de aceite de oliva (${n - 2}) [Total: ${n} grasas]`;
+          return `${n} opciones de grasa saludable`;
+        },
+        (n) => {
+          if (n === 1) return '1 Cda de semillas de chía o linaza molida en la avena/yogur (1 grasa omega-3)';
+          if (n === 2) return '1 Cda de semillas de chía (1) + 1 cdta de aceite de oliva en cocción (1) [Total: 2 grasas]';
+          return `${n} grasas (chía, aceite de oliva o aguacate)`;
         }
       ],
       c1: [
-        (n) => `${n * 6} almendras o ${n * 10} maníes / cacahuates sin sal (${n} grasa${n > 1 ? 's' : ''})`,
-        (n) => `${n * 4} mitades de nuez de nogal o ${n} Cda de semillas de chía/girasol (${n} grasa${n > 1 ? 's' : ''})`
+        (n) => `${n * 6} almendras enteras tostadas sin sal (${n} grasa${n > 1 ? 's' : ''})`,
+        (n) => `${n * 4} mitades de nuez de nogal o pecana (${n} grasa${n > 1 ? 's' : ''})`,
+        (n) => `${n} Cda de semillas de calabaza o girasol tostadas sin sal (${n} grasa${n > 1 ? 's' : ''})`
       ],
       alm: [
         (n) => {
-          if (n === 1) return '1 cdta de aceite de oliva/canola o 2 Cdas de aguacate (1 grasa)';
-          if (n === 2) return '1 cdta de aceite de oliva para cocinar (1) + 2 Cdas (1 oz) de aguacate en la ensalada (1) [Total: 2 grasas]';
-          return `1–2 cdtas de aceite vegetal + ${n - 1} porción(es) de aguacate (2 Cdas c/u) [Total: ${n} grasas]`;
+          if (n === 1) return '1 cdta de aceite de oliva virgen extra para asar la proteína (1 grasa)';
+          if (n === 2) return '1 cdta de aceite de oliva para cocinar (1) + 2 Cdas (1 oz) de aguacate fresco en la ensalada (1) [Total: 2 grasas]';
+          if (n === 3) return '1 cdta de aceite de oliva (1) + 2 Cdas de aguacate (1) + 1 cdta de aderezo vinagreta de oliva y limón (1) [Total: 3 grasas]';
+          return `1 cdta de aceite de oliva + ${n - 1} porción(es) de 2 Cdas de aguacate fresco [Total: ${n} grasas]`;
+        },
+        (n) => {
+          if (n === 1) return '2 Cdas (1 oz) de aguacate fresco en cubos sobre la ensalada (1 grasa monoinsaturada)';
+          if (n === 2) return '2 Cdas de aguacate (1) + 1 cdta de aceite de canola/oliva para saltear vegetales (1) [Total: 2 grasas]';
+          return `2 Cdas de aguacate + ${n - 1} cdtas de aceite de oliva [Total: ${n} grasas]`;
+        },
+        (n) => {
+          if (n === 1) return '1 Cda de aderezo casero de aceite de oliva y vinagre balsámico (1 grasa)';
+          return `Aderezo de aceite de oliva + rodajas de aguacate fresco [Total: ${n} grasas]`;
         }
       ],
       c2: [
-        (n) => `${n * 6} almendras o ${n} porción de 1½ cdta de mantequilla de maní (${n} grasa${n > 1 ? 's' : ''})`
+        (n) => `${n * 6} almendras tostadas sin sal o ${n * 10} maníes naturales sin sal (${n} grasa${n > 1 ? 's' : ''})`,
+        (n) => `${n} porción de 1½ cdta de mantequilla de maní 100% natural sin azúcar (${n} grasa${n > 1 ? 's' : ''})`,
+        (n) => `${n * 4} mitades de nuez o 1 Cda de semillas de girasol tostadas (${n} grasa${n > 1 ? 's' : ''})`
       ],
       cen: [
         (n) => {
-          if (n === 1) return '1 cdta de aceite de oliva o 2 Cdas de aguacate (1 grasa)';
-          if (n === 2) return '1 cdta de aceite para cocinar (1) + 2 Cdas de aguacate (1) [Total: 2 grasas]';
-          return `1 cdta de aceite + 2 Cdas de aguacate + semillas/nueces [Total: ${n} grasas]`;
+          if (n === 1) return '1 cdta de aceite de oliva virgen extra para cocinar o aderezar (1 grasa)';
+          if (n === 2) return '1 cdta de aceite de oliva (1) + 2 Cdas (1 oz) de aguacate fresco (1) [Total: 2 grasas]';
+          return `1 cdta de aceite de oliva + 2 Cdas de aguacate + semillas [Total: ${n} grasas]`;
+        },
+        (n) => {
+          if (n === 1) return '2 Cdas (1 oz) de aguacate fresco en rodajas (1 grasa)';
+          if (n === 2) return '2 Cdas de aguacate (1) + 1 cdta de aceite vegetal para la cocción (1) [Total: 2 grasas]';
+          return `2 Cdas de aguacate + ${n - 1} cdta(s) de aceite de oliva [Total: ${n} grasas]`;
+        },
+        (n) => {
+          if (n === 1) return '1 Cda de semillas de chía o ajonjolí espolvoreadas (1 grasa)';
+          return `1 cdta de aceite de oliva + semillas de ajonjolí o aguacate [Total: ${n} grasas]`;
         }
       ]
     },
     otros_cho: {
-      des: [(n) => `${n} Cda de miel o mermelada 100% fruta (${n} otro CHO)`],
-      c1: [(n) => `½ taza de gelatina o ${n} Cda de miel (${n} otro CHO)`],
-      alm: [(n) => `½ taza de gelatina regular (${n} otro CHO)`],
-      c2: [(n) => `½ taza de gelatina o 1 Cda de mermelada (${n} otro CHO)`],
-      cen: [(n) => `1 Cda de miel (${n} otro CHO)`],
+      des: [(n) => `${n} Cda de miel natural o mermelada sin azúcar agregada (${n} otro CHO)`],
+      c1: [(n) => `½ taza de gelatina regular o ${n} Cda de miel (${n} otro CHO)`],
+      alm: [(n) => `½ taza de gelatina regular o fruta en almíbar ligero (${n} otro CHO)`],
+      c2: [(n) => `½ taza de gelatina o 1 Cda de miel (${n} otro CHO)`],
+      cen: [(n) => `1 Cda de miel natural (${n} otro CHO)`],
     }
   };
 

@@ -11,6 +11,7 @@ import {
 import {
   EXCHANGE_GROUPS, MEAL_TIMES, generateMealMenuFromExchanges
 } from './data/exchangeDatabase.js';
+import { RISS_DIETS, evaluateRissDietRecommendation } from './data/rissDatabase.js';
 import ExchangePlanSection from './components/ExchangePlanSection.jsx';
 import { exportClinicalReportPDF } from './lib/pdfExport.js';
 
@@ -415,6 +416,7 @@ function calc(p) {
   };
 
   o.plan = planTotals(p);
+  o.riss = evaluateRissDietRecommendation(p, o);
   return o;
 }
 
@@ -527,7 +529,7 @@ const blankPatient = () => ({
   dieta: { rec: {}, ingesta: '', kcalEst: '', protEst: '', agua: '', alcohol: '', tabaco: '', suplementos: '', alergias: '', apetito: '', actividad: '', frec: {}, notas: '' },
   req: { formula: 'mifflin', pesoBase: 'real', kcalkg: '30', actKey: 'sed', actVal: '1.2', estKey: 'none', estVal: '1', ajuste: '0', modo: 'pct', pct: { p: '15', c: '55', l: '30' }, gkg: { p: '1', c: '4', l: '1' }, liq: '30' },
   pes: { items: [] },
-  plan: { totals: {}, eq: {}, vals: {}, menu: {}, objetivos: '', recs: '', indicadores: '', proxima: '', seg: [] },
+  plan: { totals: {}, eq: {}, vals: {}, menu: {}, objetivos: '', recs: '', indicadores: '', proxima: '', seg: [], riss: { primaryDiet: 'normal', secondaryDiets: [], justificacion: '' } },
 });
 
 function seedPatients() {
@@ -547,6 +549,11 @@ function seedPatients() {
       ]
     },
     plan: {
+      riss: {
+        primaryDiet: 'blanda',
+        secondaryDiets: ['hipocalorica', 'baja_cho', 'baja_grasa', 'hiposodica_leve'],
+        justificacion: 'Paciente con DM2 descompensada (HbA1c 7.8%), obesidad grado I (IMC 31.4 kg/m²), dislipidemia mixta e HTA. Según lineamientos RISS se prescribe dieta baja en carbohidratos, hipocalórica con déficit de 400 kcal, baja en grasa (<25%) e hiposódica leve.'
+      },
       objetivos: 'Mejorar el control glucémico (HbA1c menor de 7 %), reducir entre 5 y 7 % del peso corporal en 6 meses y mejorar el perfil lipídico.',
       recs: 'Fraccionar la alimentación en 5 tiempos de comida al día.\nSustituir las bebidas azucaradas por agua natural.\nPreferir cereales integrales y tubérculos cocidos en porciones medidas.\nPreferir preparaciones al horno, asadas o hervidas en lugar de fritas.',
       indicadores: 'Peso, circunferencia de cintura, glucosa capilar en ayunas, HbA1c a los 3 meses y perfil lipídico.',
@@ -570,7 +577,17 @@ function seedPatients() {
         { id: uid(), problema: 'Alteración de valores de laboratorio relacionados con la nutrición', custom: '', etio: 'disminución de la función renal', signos: 'creatinina 3.4 mg/dL; BUN 58 mg/dL; potasio 5.3 mEq/L' },
       ]
     },
-    plan: { objetivos: 'Frenar la pérdida de peso, cubrir al menos el 90 % de los requerimientos y controlar potasio y fósforo.', recs: 'Fraccionar la alimentación en 5 o 6 tiempos pequeños.\nAcompañar cada tiempo principal con una fuente de proteína de alto valor biológico.\nLimitar alimentos ricos en potasio y fósforo según indicación del nefrólogo.\nRegistrar peso y glucosa capilar y llevar el registro a la siguiente consulta.', indicadores: 'Peso, ingesta (recordatorio), albúmina, potasio, fósforo y hemoglobina.', proxima: '2026-10-27' }
+    plan: {
+      riss: {
+        primaryDiet: 'blanda',
+        secondaryDiets: ['hipoproteica', 'baja_potasio', 'baja_fosforo', 'hiposodica_moderada'],
+        justificacion: 'ERC estadio 4 sin diálisis (TFG 18 mL/min/1.73m²) con hiperpotasemia (K 5.3 mEq/L), hiperfosfatemia (P 5.2 mg/dL) y uremia. Se prescribe dieta hipoprotéica (0.8 g/kg) con >60% AVB, baja en potasio con técnica de doble cocción, baja en fósforo e hiposódica moderada según lineamientos hospitalarios de la RISS.'
+      },
+      objetivos: 'Frenar la pérdida de peso, cubrir al menos el 90 % de los requerimientos y controlar potasio y fósforo.',
+      recs: 'Fraccionar la alimentación en 5 o 6 tiempos pequeños.\nAcompañar cada tiempo principal con una fuente de proteína de alto valor biológico.\nLimitar alimentos ricos en potasio y fósforo según indicación del nefrólogo.\nRegistrar peso y glucosa capilar y llevar el registro a la siguiente consulta.',
+      indicadores: 'Peso, ingesta (recordatorio), albúmina, potasio, fósforo y hemoglobina.',
+      proxima: '2026-10-27'
+    }
   });
   b.plan.eq = suggestPlan(calc(b));
   return [a, b];
@@ -677,6 +694,16 @@ function reportText(p, o) {
     L.push(`Proteínas ${f0(m.p.g)} g (${f1(m.p.pct)} %, ${f2(m.p.gkg)} g/kg) | Carbohidratos ${f0(m.c.g)} g (${f1(m.c.pct)} %) | Lípidos ${f0(m.l.g)} g (${f1(m.l.pct)} %)`);
   }
   L.push('');
+  if (p.plan.riss) {
+    const rissData = p.plan.riss;
+    const primObj = RISS_DIETS.find(d => d.id === (rissData.primaryDiet || 'normal')) || RISS_DIETS[0];
+    const secObjs = (rissData.secondaryDiets || []).map(id => RISS_DIETS.find(d => d.id === id)).filter(Boolean);
+    const fullTitle = [primObj.name, ...secObjs.map(s => s.name)].join(' + ');
+    L.push('CLASIFICACIÓN DE DIETA SEGÚN RISS (MINSAL)');
+    L.push(`Prescripción: ${fullTitle}`);
+    if (rissData.justificacion) L.push(`Justificación clínica: ${rissData.justificacion}`);
+    L.push('');
+  }
   L.push('PLAN NUTRICIONAL');
   if (p.plan.objetivos) L.push('Objetivos: ' + p.plan.objetivos);
   const T = o.plan;
@@ -2190,6 +2217,39 @@ function TabReporte() {
           ) : (
             <p className="text-sm text-muted">Sin diagnósticos registrados.</p>
           )}
+        </section>
+        <section>
+          <h4>Diagnóstico y Clasificación de Dieta según RISS (MINSAL)</h4>
+          {(() => {
+            const rissData = p.plan?.riss;
+            const primObj = RISS_DIETS.find(d => d.id === (rissData?.primaryDiet || 'normal')) || RISS_DIETS[0];
+            const secObjs = (rissData?.secondaryDiets || []).map(id => RISS_DIETS.find(d => d.id === id)).filter(Boolean);
+            const fullTitle = [primObj.name, ...secObjs.map(s => s.name)].join(' + ');
+            return (
+              <div className="grid gap-3 text-sm">
+                <div>
+                  <div className="eyebrow" style={{ fontSize: '.64rem' }}>Prescripción hospitalaria / clínica</div>
+                  <div className="font-bold text-brand text-base">{fullTitle}</div>
+                </div>
+                {rissData?.justificacion && (
+                  <div>
+                    <div className="eyebrow" style={{ fontSize: '.64rem' }}>Justificación clínica según lineamientos RISS</div>
+                    <p className="text-sm leading-relaxed">{rissData.justificacion}</p>
+                  </div>
+                )}
+                <div className="grid gap-3 sm:grid-cols-2 mt-1">
+                  <div className="p-3 bg-surface-alt rounded border border-line text-xs">
+                    <strong className="text-ok font-semibold block mb-1">Alimentos prioritarios permitidos:</strong>
+                    <span>{[primObj, ...secObjs].flatMap(d => d.allowed).slice(0, 3).join('; ')}</span>
+                  </div>
+                  <div className="p-3 bg-surface-alt rounded border border-line text-xs">
+                    <strong className="text-crit font-semibold block mb-1">Restricciones y no permitidos:</strong>
+                    <span>{[primObj, ...secObjs].flatMap(d => d.forbidden).slice(0, 3).join('; ')}</span>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
         </section>
         <section>
           <h4>Requerimientos</h4>
