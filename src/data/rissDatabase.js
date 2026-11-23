@@ -25,6 +25,54 @@ export const RISS_DIETS = [
       'Bebidas azucaradas comerciales y exceso de azúcares refinados'
     ]
   },
+  {
+    id: 'embarazada',
+    name: 'Dieta de la Embarazada / Gestación (RIISS)',
+    category: 'Ciclo Vital',
+    description: 'Aporte de nutrientes y energía para cubrir las demandas metabólicas del crecimiento fetal, placenta y tejidos maternos, previniendo deficiencias y complicaciones obstétricas.',
+    energy: 'Requerimiento basal materno + 340 kcal/día (2°T) o + 452 kcal/día (3°T)',
+    macros: { cho: '50 – 55% (complejos)', p: '15 – 20% (+25 g/día en 2° y 3°T, mín. 1.1 g/kg)', l: '25 – 30% (omega-3/DHA)' },
+    indications: [
+      'Embarazo único o múltiple en cualquier trimestre de gestación',
+      'Prevención de restricción del crecimiento intrauterino (RCIU) y preeclampsia',
+      'Gestante con bajo peso, sobrepeso u obesidad según curva de Atalah'
+    ],
+    allowed: [
+      'Lácteos pasteurizados descremados o semidescremados (calcio y proteína)',
+      'Carnes magras, pollo, huevos y pescados cocidos completamente (cero alimentos crudos)',
+      'Leguminosas (frijoles, lentejas) ricas en hierro y folatos',
+      'Frutas y vegetales frescos bien lavados y desinfectados',
+      'Fraccionamiento en 5 a 6 tiempos pequeños para prevenir pirosis y náuseas'
+    ],
+    forbidden: [
+      'Lácteos no pasteurizados (quesos de leche cruda) por riesgo de Listeria monocytogenes',
+      'Carnes o mariscos crudos o a medio cocer (ceviches crudos, huevos crudos)',
+      'Pescados de gran tamaño con alto contenido de mercurio (tiburón, pez espada)',
+      'Bebidas alcohólicas (cero consumo) y exceso de cafeína (> 200 mg/día)',
+      'Dietas cetogénicas o hipocalóricas severas (< 1500 kcal) que inducen cetosis fetal'
+    ]
+  },
+  {
+    id: 'pediatrica',
+    name: 'Dieta Pediátrica y del Adolescente (RIISS)',
+    category: 'Ciclo Vital',
+    description: 'Alimentación balanceada adaptada a las necesidades dinámicas de crecimiento físico, maduración ósea y desarrollo cognitivo en la infancia y adolescencia.',
+    energy: 'Según fórmulas pediátricas de crecimiento (FAO/OMS / Schofield)',
+    macros: { cho: '50 – 60%', p: '12 – 15% (1.1–1.5 g/kg)', l: '25 – 30% (ácidos grasos esenciales)' },
+    indications: [
+      'Población pediátrica (lactantes mayores, preescolares, escolares y adolescentes)',
+      'Recuperación de retardo en talla o prevención de desnutrición infantil'
+    ],
+    allowed: [
+      'Alimentos naturales variados de los 5 grupos de la canasta alimentaria',
+      'Lácteos fortificados, huevos enteros, carnes magras, leguminosas con cereales',
+      'Verduras y frutas frescas en presentaciones de fácil masticación y deglución'
+    ],
+    forbidden: [
+      'Comida chatarra, snacks ultraprocesados con sellos de advertencia',
+      'Bebidas azucaradas comerciales, energizantes o café'
+    ]
+  },
 
   // ---- MODIFICACIONES DE CONSISTENCIA ----
   {
@@ -539,6 +587,19 @@ export function evaluateRissDietRecommendation(p, c) {
   const primaryDiet = { id: 'normal', name: 'Dieta normal o corriente', reason: 'Condición clínica basal estable sin compromiso digestivo o metabólico severo.' };
   const secondaryDiets = [];
 
+  const isEmbarazada = Boolean(g.embarazada || num(g.semGestacional) > 0);
+  const isPediatrico = !isEmbarazada && ((g.edad != null && num(g.edad) < 19) || (g.edadMeses != null && num(g.edadMeses) < 228));
+
+  if (isEmbarazada) {
+    primaryDiet.id = 'embarazada';
+    primaryDiet.name = 'Dieta de la Embarazada / Gestación (RIISS)';
+    primaryDiet.reason = `Paciente gestante en semana ${g.semGestacional || '—'}. Lineamientos RIISS prescriben dieta normocalórica con adición energética por trimestre (+340 kcal 2T, +452 kcal 3T), +25 g de proteína, fraccionamiento en 5-6 tiempos para evitar reflujo y aporte asegurado de folatos, hierro y calcio.`;
+  } else if (isPediatrico) {
+    primaryDiet.id = 'pediatrica';
+    primaryDiet.name = 'Dieta Pediátrica y del Adolescente (RIISS)';
+    primaryDiet.reason = `Paciente pediátrico/adolescente (${g.edad || '—'} años). Prescripción orientada a crecimiento y desarrollo según curvas OMS y RIISS, asegurando proteína y micronutrientes sin dietas hipocalóricas perjudiciales.`;
+  }
+
   // 1. Evaluación de consistencia
   const sint = clin.sint || {};
   if (sint.disfagia || clin.oral?.toLowerCase().includes('mastic') || clin.oral?.toLowerCase().includes('dientes') || clin.oral?.toLowerCase().includes('edentulia')) {
@@ -546,24 +607,28 @@ export function evaluateRissDietRecommendation(p, c) {
     primaryDiet.name = 'Dieta mecánicamente suave (molida / puré)';
     primaryDiet.reason = 'Presencia de alteración masticatoria / disfagia mecánica o edentulia.';
   } else if (sint.nauseas || sint.vomito || sint.pirosis || sint.distension || dxText.includes('gastritis') || dxText.includes('reflujo') || dxText.includes('ulcera')) {
-    primaryDiet.id = 'blanda';
-    primaryDiet.name = 'Dieta blanda';
-    primaryDiet.reason = 'Síntomas digestivos activos (náuseas/pirosis/gastritis) que requieren fácil digestión sin irritantes.';
+    if (!isEmbarazada) {
+      primaryDiet.id = 'blanda';
+      primaryDiet.name = 'Dieta blanda';
+      primaryDiet.reason = 'Síntomas digestivos activos (náuseas/pirosis/gastritis) que requieren fácil digestión sin irritantes.';
+    }
   }
 
   // 2. Modificaciones de Energía
-  if (imc != null && imc >= 30) {
-    secondaryDiets.push({
-      id: 'hipocalorica',
-      name: 'Dieta hipocalórica',
-      reason: `Obesidad (IMC ${imc.toFixed(1)} kg/m² ≥ 30) según lineamientos RISS para inducir pérdida ponderal controlada.`
-    });
-  } else if (imc != null && imc >= 25 && imc < 30) {
-    secondaryDiets.push({
-      id: 'hipocalorica',
-      name: 'Dieta hipocalórica',
-      reason: `Sobrepeso (IMC ${imc.toFixed(1)} kg/m²) con comorbilidades según lineamientos RISS.`
-    });
+  if (!isEmbarazada && !isPediatrico) {
+    if (imc != null && imc >= 30) {
+      secondaryDiets.push({
+        id: 'hipocalorica',
+        name: 'Dieta hipocalórica',
+        reason: `Obesidad (IMC ${imc.toFixed(1)} kg/m² ≥ 30) según lineamientos RISS para inducir pérdida ponderal controlada.`
+      });
+    } else if (imc != null && imc >= 25 && imc < 30) {
+      secondaryDiets.push({
+        id: 'hipocalorica',
+        name: 'Dieta hipocalórica',
+        reason: `Sobrepeso (IMC ${imc.toFixed(1)} kg/m²) con comorbilidades según lineamientos RISS.`
+      });
+    }
   } else if (c.tamizaje?.level === 'crit' || (imc != null && imc < 18.5) || (c.cambio != null && c.cambio >= 10)) {
     secondaryDiets.push({
       id: 'hipercalorica',

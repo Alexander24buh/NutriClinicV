@@ -12,6 +12,8 @@ import {
   EXCHANGE_GROUPS, MEAL_TIMES, generateMealMenuFromExchanges
 } from './data/exchangeDatabase.js';
 import { RISS_DIETS, evaluateRissDietRecommendation } from './data/rissDatabase.js';
+import { evaluatePregnancyStatus, evaluatePediatricNutrition } from './data/growthChartsData.js';
+import GrowthChartsView from './components/GrowthChartsView.jsx';
 import ExchangePlanSection from './components/ExchangePlanSection.jsx';
 import { exportClinicalReportPDF } from './lib/pdfExport.js';
 
@@ -98,6 +100,8 @@ const FORMULAS = [
   { k: 'hb', n: 'Harris-Benedict (1919)', d: 'Ecuación clásica; puede sobrestimar el gasto en obesidad.' },
   { k: 'hbrev', n: 'Harris-Benedict revisada (Roza-Shizgal)', d: 'Actualización de 1984 de la ecuación original.' },
   { k: 'who', n: 'FAO/OMS/UNU (Schofield)', d: 'Usa solo peso, sexo y grupo de edad (18–30, 30–60, más de 60 años).' },
+  { k: 'who_ped', n: 'FAO/OMS Pediátrico / Schofield (0–18 años)', d: 'Ecuación estándar internacional por peso y sexo para lactantes, niños y adolescentes.' },
+  { k: 'embarazo_iom', n: 'Gestación: IOM / FAO-OMS (+ Trimestre)', d: 'Calcula GEB basal materno y adiciona automáticamente el gasto del trimestre (+0 T1, +340 T2, +452 T3).' },
   { k: 'cunning', n: 'Cunningham (masa libre de grasa)', d: 'Requiere porcentaje de grasa; se calcula con los 4 pliegues (Durnin-Womersley).' },
   { k: 'kdoqi', n: 'KDOQI: enfermedad renal crónica (kcal/kg)', d: 'KDOQI 2020 sugiere 25–35 kcal/kg/día según edad, actividad y estado nutricional. No usa factores de actividad ni estrés.', kg: true, def: '30' },
   { k: 'espen', n: 'ESPEN: paciente enfermo (kcal/kg)', d: 'Referencia de 25–30 kcal/kg/día para pacientes hospitalizados o polimórbidos. No usa factores de actividad ni estrés.', kg: true, def: '27' },
@@ -117,11 +121,22 @@ const GRUPOS = EXCHANGE_GROUPS.map(g => ({
 }));
 const PROBLEMAS = [
   ['Ingesta', ['Ingesta deficiente de energía', 'Ingesta excesiva de energía', 'Ingesta oral inadecuada', 'Ingesta inadecuada de líquidos', 'Ingesta inadecuada de proteína', 'Ingesta excesiva de proteína', 'Ingesta excesiva de carbohidratos', 'Ingesta excesiva de grasa', 'Ingesta inadecuada de fibra', 'Ingesta excesiva de sodio', 'Ingesta excesiva de alcohol', 'Aumento de las necesidades de energía o nutrientes']],
-  ['Clínico', ['Dificultad para deglutir', 'Dificultad para masticar', 'Alteración de la función gastrointestinal', 'Alteración de valores de laboratorio relacionados con la nutrición', 'Interacción alimento-medicamento', 'Bajo peso', 'Pérdida de peso involuntaria', 'Sobrepeso', 'Obesidad', 'Ganancia de peso involuntaria', 'Desnutrición', 'Utilización alterada de nutrientes']],
+  ['Clínico', ['Dificultad para deglutir', 'Dificultad para masticar', 'Alteración de la función gastrointestinal', 'Alteración de valores de laboratorio relacionados con la nutrición', 'Interacción alimento-medicamento', 'Bajo peso', 'Pérdida de peso involuntaria', 'Sobrepeso', 'Obesidad', 'Ganancia de peso involuntaria', 'Desnutrición', 'Ganancia de peso gestacional insuficiente', 'Ganancia de peso gestacional excesiva', 'Retardo en el crecimiento (pediatría)', 'Desnutrición infantil (baja longitud/peso)', 'Utilización alterada de nutrientes']],
   ['Conductual y ambiental', ['Conocimientos deficientes relacionados con la alimentación y la nutrición', 'Creencias y actitudes alimentarias inadecuadas', 'Poca disposición para el cambio en la dieta o el estilo de vida', 'Selección inadecuada de alimentos', 'Actividad física insuficiente', 'Acceso limitado a alimentos o agua']],
 ];
 const OTRO = '__otro__';
-const ETIO_SUG = ['ingesta oral limitada por náuseas, disgeusia y saciedad temprana', 'consumo frecuente de bebidas azucaradas y alimentos ricos en grasa, con baja actividad física', 'desequilibrio entre la ingesta y el gasto energético', 'conocimientos insuficientes sobre alimentación saludable', 'incremento de las necesidades por estado catabólico', 'restricciones dietéticas impuestas por la enfermedad', 'acceso limitado a alimentos', 'actividad física insuficiente'];
+const ETIO_SUG = [
+  'ingesta oral limitada por náuseas, disgeusia y saciedad temprana',
+  'consumo frecuente de bebidas azucaradas y alimentos ricos en grasa, con baja actividad física',
+  'desequilibrio entre la ingesta y el gasto energético',
+  'conocimientos insuficientes sobre alimentación saludable',
+  'incremento de las necesidades por estado catabólico',
+  'aumento de los requerimientos nutricionales por estado de gestación',
+  'ingesta energética y proteica insuficiente para el crecimiento ponderal infantil',
+  'restricciones dietéticas impuestas por la enfermedad',
+  'acceso limitado a alimentos',
+  'actividad física insuficiente'
+];
 const REC_SUG = ['Fraccionar la alimentación en 5 tiempos de comida al día.', 'Preferir cereales integrales y tubérculos cocidos en porciones medidas.', 'Sustituir las bebidas azucaradas por agua natural.', 'Aumentar el consumo de verduras y frutas enteras.', 'Limitar el sodio a menos de 2,000 mg al día y no agregar sal en la mesa.', 'Preferir preparaciones al horno, asadas o hervidas en lugar de fritas.', 'Acompañar cada tiempo principal con una fuente de proteína de alto valor biológico.', 'Realizar al menos 150 minutos de actividad física moderada por semana, según tolerancia.', 'Registrar peso y glucosa capilar y llevar el registro a la siguiente consulta.'];
 
 const DW = {
@@ -198,8 +213,52 @@ function calc(p) {
   const o = { edad, sexo, peso, talla, hab };
   const h = talla > 0 ? talla / 100 : null;
   o.imc = peso > 0 && h ? peso / (h * h) : null;
-  o.imcCl = clasifIMC(o.imc, edad);
-  o.imcEscala = edad != null && edad >= 65 ? 'OPS, adulto mayor' : 'OMS, adulto';
+
+  // Detección de condición fisiológica: Gestación o Pediatría
+  const semGest = num(g.semGestacional);
+  const pesoPregest = num(g.pesoPregestacional);
+  const isEmbarazada = sexo === 'F' && (g.embarazada === true || g.embarazada === 'true' || semGest != null);
+  const edadMeses = num(g.edadMeses);
+  const isPediatrico = !isEmbarazada && ((edad != null && edad < 19) || edadMeses != null);
+
+  o.isEmbarazada = isEmbarazada;
+  o.isPediatrico = isPediatrico;
+  o.semGestacional = semGest;
+  o.pesoPregestacional = pesoPregest;
+  o.edadMeses = edadMeses;
+
+  // Evaluación de estado nutricional según modelo
+  if (isEmbarazada && semGest != null && o.imc != null) {
+    const pregEval = evaluatePregnancyStatus(semGest, o.imc, pesoPregest, h);
+    o.pregnancyEval = pregEval;
+    if (pregEval) {
+      o.imcCl = lv(pregEval.level, `${pregEval.diagnosis} (Sem ${semGest})`, pregEval.level === 'ok' ? '✓' : '↑');
+      o.imcEscala = 'Atalah / MINSAL El Salvador (Gestacional)';
+    } else {
+      o.imcCl = clasifIMC(o.imc, edad);
+      o.imcEscala = 'Atalah / MINSAL El Salvador';
+    }
+  } else if (isPediatrico) {
+    const pedEval = evaluatePediatricNutrition({
+      ageYears: edad,
+      ageMonths: edadMeses,
+      sex: sexo,
+      weightKg: peso,
+      heightCm: talla,
+      hcCm: num(a.pc)
+    });
+    o.pediatricEval = pedEval;
+    if (pedEval && pedEval.primaryDiagnosis && !pedEval.error) {
+      o.imcCl = lv(pedEval.level, pedEval.primaryDiagnosis, pedEval.level === 'ok' ? '✓' : '↓');
+      o.imcEscala = edadMeses != null && edadMeses <= 24 ? 'OMS 2006 (0–24 meses)' : (edad != null && edad < 5) ? 'OMS 2006 (2–5 años)' : 'OMS 2007 (5–19 años)';
+    } else {
+      o.imcCl = clasifIMC(o.imc, edad);
+      o.imcEscala = 'OMS Pediátrico';
+    }
+  } else {
+    o.imcCl = clasifIMC(o.imc, edad);
+    o.imcEscala = edad != null && edad >= 65 ? 'OPS, adulto mayor' : 'OMS, adulto';
+  }
   const per = PERIODOS.find(x => x.k === a.periodo) || PERIODOS[2];
   o.per = per;
   o.cambio = peso > 0 && hab > 0 ? (hab - peso) / hab * 100 : null;
@@ -314,7 +373,20 @@ function calc(p) {
   const F = r.formula, W = o.wCalc, A = edad, M = sexo === 'M';
   o.kgMode = !!(FORMULAS.find(x => x.k === F) || {}).kg;
   let geb = null;
-  if (F === 'mifflin' && W && talla && A != null && sexo) geb = 10 * W + 6.25 * talla - 5 * A + (M ? 5 : -161);
+  if (F === 'embarazo_iom' && W && talla && A != null) {
+    const baseGeb = 10 * W + 6.25 * talla - 5 * A - 161;
+    const sem = semGest || 20;
+    const trimAdd = sem < 14 ? 0 : sem < 28 ? 340 : 452;
+    geb = baseGeb + trimAdd;
+  } else if (F === 'who_ped' && W) {
+    const mAge = edadMeses != null ? edadMeses / 12 : (A != null ? A : 5);
+    if (M) {
+      geb = mAge < 3 ? 59.512 * W - 30.4 : mAge < 10 ? 22.706 * W + 504.3 : 17.686 * W + 658.2;
+    } else {
+      geb = mAge < 3 ? 58.317 * W - 31.1 : mAge < 10 ? 20.315 * W + 485.9 : 13.384 * W + 692.6;
+    }
+    geb = Math.max(geb, 200);
+  } else if (F === 'mifflin' && W && talla && A != null && sexo) geb = 10 * W + 6.25 * talla - 5 * A + (M ? 5 : -161);
   else if (F === 'hb' && W && talla && A != null && sexo) geb = M ? 66.5 + 13.75 * W + 5.003 * talla - 6.775 * A : 655.1 + 9.563 * W + 1.850 * talla - 4.676 * A;
   else if (F === 'hbrev' && W && talla && A != null && sexo) geb = M ? 88.362 + 13.397 * W + 4.799 * talla - 5.677 * A : 447.593 + 9.247 * W + 3.098 * talla - 4.330 * A;
   else if (F === 'who' && W && A != null && sexo) { geb = A < 30 ? (M ? 15.057 * W + 692.2 : 14.818 * W + 486.6) : A <= 60 ? (M ? 11.472 * W + 873.1 : 8.126 * W + 845.6) : (M ? 11.711 * W + 587.7 : 9.082 * W + 658.5); }
@@ -356,7 +428,11 @@ function calc(p) {
   }
   o.fibra = o.vct ? o.vct / 1000 * 14 : null;
   const liq = num(r.liq);
-  o.liquidos = liq && peso ? liq * peso : null;
+  let baseLiq = liq && peso ? liq * peso : null;
+  if (isEmbarazada && baseLiq != null) {
+    baseLiq += 300; // Adición hídrica gestacional recomendada (IOM / MINSAL)
+  }
+  o.liquidos = baseLiq;
 
   // Dieta
   const ke = num(d.kcalEst), pe = num(d.protEst);
@@ -422,7 +498,13 @@ function calc(p) {
 
 function evidencias(p, o) {
   const E = [];
-  if (o.imc != null && o.imcCl) E.push(`IMC ${f1(o.imc)} kg/m² (${o.imcCl.label.toLowerCase()})`);
+  if (o.pregnancyEval) {
+    E.push(`Atalah Gestacional Sem ${o.pregnancyEval.week}: ${o.pregnancyEval.diagnosis} (meta ganancia total: ${o.pregnancyEval.targetGain})`);
+  } else if (o.pediatricEval && o.pediatricEval.primaryDiagnosis) {
+    E.push(`Evaluación Pediátrica OMS: ${o.pediatricEval.primaryDiagnosis}`);
+  } else if (o.imc != null && o.imcCl) {
+    E.push(`IMC ${f1(o.imc)} kg/m² (${o.imcCl.label.toLowerCase()})`);
+  }
   if (o.cambio != null && o.cambio > 0) E.push(`pérdida de peso de ${f1(o.cambio)} % en ${o.per.l.toLowerCase()}`);
   if (o.cintura != null) E.push(`circunferencia de cintura de ${f0(o.cintura)} cm${o.cinturaCl && o.cinturaCl.level !== 'ok' ? ' (' + o.cinturaCl.label.toLowerCase() + ')' : ''}`);
   if (o.egfr != null) E.push(`TFG estimada ${f0(o.egfr)} mL/min/1.73m² (${o.egfrStage})`);
@@ -522,8 +604,8 @@ function suggestPlan(o) {
 const blankPatient = () => ({
   id: uid(),
   ejemplo: false,
-  gen: { nombre: '', edad: '', sexo: '', fecha: today(), expediente: '', dx: '', motivo: '', meds: '', antecedentes: '' },
-  antro: { peso: '', talla: '', habitual: '', periodo: '3m', cintura: '', cadera: '', cb: '', pct: '', pbi: '', psub: '', psup: '' },
+  gen: { nombre: '', edad: '', edadMeses: '', sexo: '', fecha: today(), expediente: '', dx: '', motivo: '', meds: '', antecedentes: '', embarazada: false, semGestacional: '', pesoPregestacional: '' },
+  antro: { peso: '', talla: '', habitual: '', periodo: '3m', cintura: '', cadera: '', cb: '', pct: '', pbi: '', psub: '', psup: '', pc: '', longitudTipo: 'de_pie' },
   bio: { glucosa: '', hba1c: '', creatinina: '', bun: '', urea: '', albumina: '', fosforo: '', calcio: '', magnesio: '', pcr: '', colesterol: '', ldl: '', hdl: '', tg: '', potasio: '', sodio: '', hemoglobina: '' },
   clin: { sint: {}, pat: {}, musculo: 'normal', grasa: 'normal', edema: 'no', ascitis: 'no', fuerza: '', hidratacion: '', piel: '', oral: '', otros: '' },
   dieta: { rec: {}, ingesta: '', kcalEst: '', protEst: '', agua: '', alcohol: '', tabaco: '', suplementos: '', alergias: '', apetito: '', actividad: '', frec: {}, notas: '' },
@@ -1083,35 +1165,85 @@ function Sidebar({ state, setActive, addP, onExportJson, onImportJson, onOpenClo
 }
 
 function TabPaciente({ removeP }) {
-  const { c } = useCtx();
+  const { p, c, set } = useCtx();
   const [conf, setConf] = useState(false);
+  const isFem = p.gen.sexo === 'F';
+
   return (
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,19rem)]">
-      <section className="card p-5">
-        <h2 className="h2">Datos generales</h2>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Nombre completo" className="sm:col-span-2"><In path="gen.nombre" /></Field>
-          <Field label="Edad"><In path="gen.edad" num unit="años" /></Field>
-          <Field label="Sexo"><Sel path="gen.sexo" options={[['', 'Seleccione'], ['F', 'Femenino'], ['M', 'Masculino']]} /></Field>
-          <Field label="Fecha de consulta"><In path="gen.fecha" type="date"/></Field>
-          <Field label="No. de expediente"><In path="gen.expediente" /></Field>
-          <Field label="Diagnóstico médico" className="sm:col-span-2"><In path="gen.dx" /></Field>
-          <Field label="Motivo de consulta" className="sm:col-span-2"><Area path="gen.motivo" rows={2} /></Field>
-          <Field label="Medicamentos y suplementos" className="sm:col-span-2"><Area path="gen.meds" rows={2} /></Field>
-          <Field label="Antecedentes personales y familiares" className="sm:col-span-2"><Area path="gen.antecedentes" rows={2} /></Field>
-        </div>
-      </section>
       <div className="grid gap-4 content-start">
-        {c.edad != null && c.edad < 18 && (
-          <div className="card p-4" style={{ borderColor: 'var(--warn)' }}>
-            <div className="text-sm font-medium" style={{ color: 'var(--warn)' }}>Paciente menor de 18 años</div>
-            <p className="hint">Las ecuaciones y clasificaciones de esta herramienta son para adultos. En pediatría use curvas de crecimiento y requerimientos por edad.</p>
+        <section className="card p-5">
+          <h2 className="h2">Datos generales</h2>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Nombre completo" className="sm:col-span-2"><In path="gen.nombre" /></Field>
+            <div className="grid grid-cols-2 gap-2">
+              <Field label="Edad en años"><In path="gen.edad" num unit="años" /></Field>
+              <Field label="Edad en meses" hint="0–59 m (lactantes/niños)"><In path="gen.edadMeses" num unit="meses" /></Field>
+            </div>
+            <Field label="Sexo"><Sel path="gen.sexo" options={[['', 'Seleccione'], ['F', 'Femenino'], ['M', 'Masculino']]} /></Field>
+            <Field label="Fecha de consulta"><In path="gen.fecha" type="date"/></Field>
+            <Field label="No. de expediente"><In path="gen.expediente" /></Field>
+            <Field label="Diagnóstico médico" className="sm:col-span-2"><In path="gen.dx" /></Field>
+            <Field label="Motivo de consulta" className="sm:col-span-2"><Area path="gen.motivo" rows={2} /></Field>
+            <Field label="Medicamentos y suplementos" className="sm:col-span-2"><Area path="gen.meds" rows={2} /></Field>
+            <Field label="Antecedentes personales y familiares" className="sm:col-span-2"><Area path="gen.antecedentes" rows={2} /></Field>
+          </div>
+        </section>
+
+        {/* Condición Obstétrica / Gestación */}
+        {isFem && (
+          <section className="card p-5 border-l-4" style={{ borderLeftColor: 'var(--brand)' }}>
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h3 className="h3 mb-0">Condición Obstétrica / Embarazo</h3>
+                <p className="text-xs text-muted">Habilita las curvas de evaluación nutricional Atalah (MINSAL El Salvador) y requerimientos IOM</p>
+              </div>
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  className="w-4 h-4 rounded text-brand focus:ring-brand"
+                  checked={Boolean(p.gen.embarazada)}
+                  onChange={e => set('gen.embarazada', e.target.checked)}
+                />
+                <span className="text-sm font-semibold">¿Paciente embarazada?</span>
+              </label>
+            </div>
+
+            {p.gen.embarazada && (
+              <div className="grid gap-4 sm:grid-cols-2 pt-2 border-t border-[var(--line)]">
+                <Field label="Edad gestacional" hint="Rango de curvas Atalah: 6 a 42 semanas">
+                  <In path="gen.semGestacional" num unit="sem" placeholder="Ej. 24" />
+                </Field>
+                <Field label="Peso pregestacional" hint="Para evaluar IMC pregestacional y meta IOM">
+                  <In path="gen.pesoPregestacional" num unit="kg" placeholder="Ej. 60.5" />
+                </Field>
+              </div>
+            )}
+          </section>
+        )}
+      </div>
+
+      <div className="grid gap-4 content-start">
+        {c.isEmbarazada && (
+          <div className="card p-4 border-l-4" style={{ borderLeftColor: 'var(--brand)' }}>
+            <div className="text-sm font-semibold text-brand">Modelo Activo: Gestación (Atalah / MINSAL)</div>
+            <p className="text-xs text-muted mt-1">
+              Las curvas de IMC/Edad gestacional determinarán el diagnóstico antropométrico y guiarán el PAN sin restricciones energéticas dañinas.
+            </p>
+          </div>
+        )}
+        {c.isPediatrico && (
+          <div className="card p-4 border-l-4" style={{ borderLeftColor: 'var(--warn)' }}>
+            <div className="text-sm font-semibold" style={{ color: 'var(--warn)' }}>Modelo Activo: Pediatría OMS</div>
+            <p className="text-xs text-muted mt-1">
+              Patrones OMS 2006 (0–5 años) y OMS 2007 (5–19 años) con puntajes Z y ecuaciones pediátricas FAO/OMS/Schofield.
+            </p>
           </div>
         )}
         {!c.sexo && (
           <div className="card p-4">
             <div className="text-sm font-medium">Falta indicar el sexo</div>
-            <p className="hint">Se necesita para el peso ideal, las ecuaciones de gasto energético y los rangos de laboratorio.</p>
+            <p className="hint">Se necesita para el peso ideal, las curvas de crecimiento y las ecuaciones de gasto energético.</p>
           </div>
         )}
         <div className="card p-4">
@@ -1136,23 +1268,42 @@ function TabPaciente({ removeP }) {
 }
 
 function SubA() {
-  const { c } = useCtx();
+  const { p, c, set, upd } = useCtx();
   return (
-    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)]">
-      <div className="grid gap-4 content-start">
-        <section className="card p-5">
-          <h3 className="h3">Peso y talla</h3>
-          <div className="grid gap-4 sm:grid-cols-3">
-            <Field label="Peso actual"><In path="antro.peso" num unit="kg" /></Field>
-            <Field label="Talla"><In path="antro.talla" num unit="cm" /></Field>
-            <Field label="Peso habitual"><In path="antro.habitual" num unit="kg" /></Field>
-          </div>
-          <div className="mt-4 max-w-sm">
-            <Field label="Tiempo en que ocurrió el cambio de peso" hint="Define el umbral de pérdida significativa (Blackburn).">
-              <Sel path="antro.periodo" options={PERIODOS.map(x => [x.k, x.l])} />
-            </Field>
-          </div>
-        </section>
+    <div className="grid gap-6">
+      {/* Gráfica Interactiva de Crecimiento OMS / Evaluación Nutricional Gestacional Atalah MINSAL */}
+      <GrowthChartsView p={p} c={c} set={set} upd={upd} />
+
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)]">
+        <div className="grid gap-4 content-start">
+          <section className="card p-5">
+            <h3 className="h3">Peso y talla</h3>
+            <div className="grid gap-4 sm:grid-cols-3">
+              <Field label="Peso actual"><In path="antro.peso" num unit="kg" /></Field>
+              <Field label={c.isPediatrico && (num(p.gen.edadMeses) || 0) < 24 ? "Longitud / Talla" : "Talla"}>
+                <In path="antro.talla" num unit="cm" />
+              </Field>
+              <Field label="Peso habitual"><In path="antro.habitual" num unit="kg" /></Field>
+            </div>
+
+            {/* Campos complementarios para pediatría */}
+            {c.isPediatrico && (
+              <div className="grid gap-4 sm:grid-cols-2 mt-4 pt-4 border-t border-[var(--line)]">
+                <Field label="Perímetro cefálico" hint="Para lactantes 0 a 24 meses (OMS 2006)">
+                  <In path="antro.pc" num unit="cm" placeholder="Ej. 42.5" />
+                </Field>
+                <Field label="Técnica de medición">
+                  <Sel path="antro.longitudTipo" options={[['de_pie', 'De pie (Talla)'], ['acostado', 'Acostado / decúbito (Longitud)']]} />
+                </Field>
+              </div>
+            )}
+
+            <div className="mt-4 max-w-sm">
+              <Field label="Tiempo en que ocurrió el cambio de peso" hint="Define el umbral de pérdida significativa (Blackburn).">
+                <Sel path="antro.periodo" options={PERIODOS.map(x => [x.k, x.l])} />
+              </Field>
+            </div>
+          </section>
         <section className="card p-5">
           <h3 className="h3">Circunferencias</h3>
           <div className="grid gap-4 sm:grid-cols-3">
@@ -1198,6 +1349,7 @@ function SubA() {
           <Metric label="Grasa corporal estimada" value={f1(c.gc)} unit="%" note={c.mg != null ? `Masa grasa ${f1(c.mg)} kg · masa libre ${f1(c.mlg)} kg` : 'Requiere los 4 pliegues, edad y sexo'} />
         </section>
       </div>
+    </div>
     </div>
   );
 }
@@ -1535,6 +1687,38 @@ function TabReq() {
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)]">
       <div className="grid gap-4 content-start">
+        {c.isEmbarazada && (
+          <div className="card p-4 border border-[var(--brand)] bg-[var(--sunken)] rounded-lg flex items-start justify-between gap-3">
+            <div className="text-sm">
+              <div className="font-semibold text-brand">Prescripción Energética para Gestación (IOM / MINSAL)</div>
+              <p className="mt-1 text-xs text-muted">
+                {c.semGestacional ? `Semana gestacional: ${c.semGestacional}. ` : ''}Adición automática por trimestre (+0 T1, +340 T2, +452 T3) y soporte hídrico (+300 mL/día). No aplique restricciones calóricas severas.
+              </p>
+            </div>
+            {r.formula !== 'embarazo_iom' && (
+              <button className="btn btn-sm btn-primary shrink-0" onClick={() => onFormula('embarazo_iom')}>
+                Usar IOM Gestación
+              </button>
+            )}
+          </div>
+        )}
+
+        {c.isPediatrico && (
+          <div className="card p-4 border border-[var(--warn)] bg-[var(--sunken)] rounded-lg flex items-start justify-between gap-3">
+            <div className="text-sm">
+              <div className="font-semibold" style={{ color: 'var(--warn)' }}>Prescripción Pediátrica (FAO/OMS/Schofield)</div>
+              <p className="mt-1 text-xs text-muted">
+                Calcula el GEB por peso, sexo y grupo de edad infantil/adolescente para asegurar el crecimiento ponderal normal.
+              </p>
+            </div>
+            {r.formula !== 'who_ped' && (
+              <button className="btn btn-sm btn-primary shrink-0" onClick={() => onFormula('who_ped')}>
+                Usar OMS Pediátrico
+              </button>
+            )}
+          </div>
+        )}
+
         {c.refeeding.isRisk && (
           <div className="card p-4 bg-warn-soft border border-warn rounded-lg flex items-start gap-3">
             <AlertTriangle className="w-5 h-5 text-warn flex-shrink-0 mt-0.5" />

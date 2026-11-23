@@ -156,7 +156,52 @@ export function exportClinicalReportPDF({ p, c, SINT, PATOL, RECALL, FORMULAS, p
       ['Grasa corporal (4 pliegues)', c.gc != null ? `${f1(c.gc)}% (${f1(c.mg)} kg)` : '—', 'Masa libre de grasa', c.mlg != null ? `${f1(c.mlg)} kg` : '—']
     ]
   });
-  y = doc.lastAutoTable.finalY + 4;
+  y = doc.lastAutoTable.finalY + 3;
+
+  // Cuadro específico para Embarazo o Pediatría según modelo activo
+  if (c.isEmbarazada && c.pregnancyEval) {
+    autoTable(doc, {
+      startY: y,
+      margin: { left: margin, right: margin },
+      theme: 'plain',
+      styles: { fontSize: 8, cellPadding: 2, textColor: inkColor },
+      body: [
+        [
+          {
+            content: `EVALUACIÓN NUTRICIONAL GESTACIONAL (Curvas Atalah / MINSAL El Salvador):\n` +
+              `• Semana gestacional: ${c.pregnancyEval.week} semanas  |  IMC actual: ${f1(c.pregnancyEval.imc)} kg/m²\n` +
+              `• Diagnóstico antropométrico: ${c.pregnancyEval.diagnosis}\n` +
+              `• Meta de ganancia ponderal (IOM / MINSAL): ${c.pregnancyEval.targetGain} (${c.pregnancyEval.weeklyGainRate})` +
+              (p.gen.pesoPregestacional ? `  |  Peso pregestacional: ${p.gen.pesoPregestacional} kg` : ''),
+            styles: { fillColor: [240, 249, 255], textColor: [12, 74, 96] }
+          }
+        ]
+      ]
+    });
+    y = doc.lastAutoTable.finalY + 3;
+  } else if (c.isPediatrico && c.pediatricEval && c.pediatricEval.primaryDiagnosis) {
+    const inds = c.pediatricEval.indicators || {};
+    const indLines = Object.values(inds).map(ind => `• ${ind.name}: ${ind.value} -> ${ind.diag}`).join('\n');
+    autoTable(doc, {
+      startY: y,
+      margin: { left: margin, right: margin },
+      theme: 'plain',
+      styles: { fontSize: 8, cellPadding: 2, textColor: inkColor },
+      body: [
+        [
+          {
+            content: `EVALUACIÓN DE CRECIMIENTO INFANTIL Y ADOLESCENTE (Patrones OMS 2006 / 2007 - MINSAL):\n` +
+              `• Diagnóstico antropométrico primario: ${c.pediatricEval.primaryDiagnosis}\n` +
+              (indLines ? `${indLines}\n` : '') +
+              (p.antro.pc ? `• Perímetro cefálico: ${p.antro.pc} cm  ` : '') +
+              (p.gen.edadMeses ? `• Edad en meses: ${p.gen.edadMeses} m` : ''),
+            styles: { fillColor: [254, 252, 232], textColor: [113, 63, 18] }
+          }
+        ]
+      ]
+    });
+    y = doc.lastAutoTable.finalY + 3;
+  }
 
   // ==== 3. BIOQUÍMICA ====
   const bs = (c.bio || []).filter(b => b.v != null);
