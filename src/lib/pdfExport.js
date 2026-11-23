@@ -130,7 +130,59 @@ export function exportClinicalReportPDF({ p, c, SINT, PATOL, RECALL, FORMULAS, p
       ]
     ]
   });
-  y = doc.lastAutoTable.finalY + 4;
+  y = doc.lastAutoTable.finalY + 3;
+
+  // Subtabla estructurada de Fármacos / Suplementos y Horarios
+  const medList = Array.isArray(g.medList) ? g.medList : [];
+  if (medList.length > 0) {
+    const medTableRows = medList.map(m => {
+      const relLabel = m.relacionComidas === 'con_comidas' ? 'Con comidas' : m.relacionComidas === 'en_ayunas' ? 'En ayunas' : m.relacionComidas === 'separado_comidas' ? 'Separado comidas' : 'Indiferente';
+      const tiemposText = (m.tiemposComida || []).map(tk => {
+        const mt = MEAL_TIMES.find(o => o.k === tk);
+        return mt ? mt.n.split(' ')[0] : tk;
+      }).join(', ') || '—';
+      return [
+        cleanStr(m.nombre),
+        cleanStr(m.categoria),
+        cleanStr(m.dosisFrecuencia),
+        cleanStr(relLabel),
+        cleanStr(tiemposText),
+        cleanStr(m.observacion || '—')
+      ];
+    });
+
+    autoTable(doc, {
+      startY: y,
+      margin: { left: margin, right: margin },
+      theme: 'grid',
+      styles: { fontSize: 7, cellPadding: 1.6, textColor: inkColor, lineColor: [211, 224, 226] },
+      headStyles: { fillColor: [83, 104, 110], textColor: [255, 255, 255], fontStyle: 'bold' },
+      head: [['Medicamento / Suplemento', 'Categoría', 'Dosis / Frecuencia', 'Toma c/ alimentos', 'Tiempos', 'Observaciones']],
+      body: medTableRows
+    });
+    y = doc.lastAutoTable.finalY + 3;
+  }
+
+  // Alertas / Sinergias Fármaco–Alimento si existen
+  const drugAlerts = (c.medAlerts?.alerts || []).slice(0, 3);
+  if (drugAlerts.length > 0) {
+    autoTable(doc, {
+      startY: y,
+      margin: { left: margin, right: margin },
+      theme: 'plain',
+      styles: { fontSize: 7.2, cellPadding: 1.8, textColor: inkColor },
+      body: [
+        [
+          {
+            content: `ALERTAS Y SINERGIAS FÁRMACO–ALIMENTO:\n` +
+              drugAlerts.map(a => `• [${a.med}] ${a.titulo}: ${a.accion}`).join('\n'),
+            styles: { fillColor: [254, 249, 195], textColor: [113, 63, 18] }
+          }
+        ]
+      ]
+    });
+    y = doc.lastAutoTable.finalY + 4;
+  }
 
   // ==== 2. ANTROPOMETRÍA ====
   addSectionHeader('2. A. Valoración Antropométrica');

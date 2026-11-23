@@ -13,7 +13,9 @@ import {
 } from './data/exchangeDatabase.js';
 import { RISS_DIETS, evaluateRissDietRecommendation } from './data/rissDatabase.js';
 import { evaluatePregnancyStatus, evaluatePediatricNutrition } from './data/growthChartsData.js';
+import { evaluateMedicationAlerts } from './data/drugFoodInteractions.js';
 import GrowthChartsView from './components/GrowthChartsView.jsx';
+import MedicationsSection from './components/MedicationsSection.jsx';
 import ExchangePlanSection from './components/ExchangePlanSection.jsx';
 import { exportClinicalReportPDF } from './lib/pdfExport.js';
 
@@ -493,6 +495,7 @@ function calc(p) {
 
   o.plan = planTotals(p);
   o.riss = evaluateRissDietRecommendation(p, o);
+  o.medAlerts = evaluateMedicationAlerts(p, o);
   return o;
 }
 
@@ -518,6 +521,13 @@ function evidencias(p, o) {
   if (p.clin.musculo && p.clin.musculo !== 'normal') E.push(`pérdida de masa muscular ${p.clin.musculo}`);
   if (p.clin.grasa && p.clin.grasa !== 'normal') E.push(`pérdida de grasa subcutánea ${p.clin.grasa}`);
   if (p.clin.edema && p.clin.edema !== 'no') E.push(`edema ${p.clin.edema}`);
+
+  // Evidencias de alertas farmacológicas y sinergias nutricionales para el formato PES
+  if (o.medAlerts && o.medAlerts.alerts && o.medAlerts.alerts.length > 0) {
+    o.medAlerts.alerts.slice(0, 3).forEach(al => {
+      E.push(`Fármaco-dieta: ${al.titulo} (${al.med})`);
+    });
+  }
   return E;
 }
 
@@ -604,7 +614,7 @@ function suggestPlan(o) {
 const blankPatient = () => ({
   id: uid(),
   ejemplo: false,
-  gen: { nombre: '', edad: '', edadMeses: '', sexo: '', fecha: today(), expediente: '', dx: '', motivo: '', meds: '', antecedentes: '', embarazada: false, semGestacional: '', pesoPregestacional: '' },
+  gen: { nombre: '', edad: '', edadMeses: '', sexo: '', fecha: today(), expediente: '', dx: '', motivo: '', meds: '', medList: [], antecedentes: '', embarazada: false, semGestacional: '', pesoPregestacional: '' },
   antro: { peso: '', talla: '', habitual: '', periodo: '3m', cintura: '', cadera: '', cb: '', pct: '', pbi: '', psub: '', psup: '', pc: '', longitudTipo: 'de_pie' },
   bio: { glucosa: '', hba1c: '', creatinina: '', bun: '', urea: '', albumina: '', fosforo: '', calcio: '', magnesio: '', pcr: '', colesterol: '', ldl: '', hdl: '', tg: '', potasio: '', sodio: '', hemoglobina: '' },
   clin: { sint: {}, pat: {}, musculo: 'normal', grasa: 'normal', edema: 'no', ascitis: 'no', fuerza: '', hidratacion: '', piel: '', oral: '', otros: '' },
@@ -618,7 +628,20 @@ function seedPatients() {
   const mk = o => merge(blankPatient(), o);
   const a = mk({
     ejemplo: true,
-    gen: { nombre: 'María Elena Rivas', edad: '54', sexo: 'F', expediente: 'EJ-0001', dx: 'Diabetes mellitus tipo 2, obesidad grado I e hipertensión arterial', motivo: 'Control glucémico y reducción de peso', meds: 'Metformina 850 mg cada 12 h; losartán 50 mg al día', antecedentes: 'Madre con diabetes tipo 2.' },
+    gen: {
+      nombre: 'María Elena Rivas',
+      edad: '54',
+      sexo: 'F',
+      expediente: 'EJ-0001',
+      dx: 'Diabetes mellitus tipo 2, obesidad grado I e hipertensión arterial',
+      motivo: 'Control glucémico y reducción de peso',
+      meds: 'Metformina 850 mg cada 12 h; losartán 50 mg al día',
+      medList: [
+        { id: 'm1', nombre: 'Metformina', categoria: 'Hipoglucemiante / Insulina', dosisFrecuencia: '850 mg cada 12 h', relacionComidas: 'con_comidas', tiemposComida: ['des', 'cen'], observacion: 'Tomar con alimentos principales para reducir síntomas gastrointestinales.' },
+        { id: 'm2', nombre: 'Losartán', categoria: 'Antihipertensivo', dosisFrecuencia: '50 mg al día', relacionComidas: 'indiferente', tiemposComida: ['des'], observacion: 'Vigilar potasio sérico; no usar sustitutos de sal con KCl.' }
+      ],
+      antecedentes: 'Madre con diabetes tipo 2.'
+    },
     antro: { peso: '78.5', talla: '158', habitual: '81', periodo: '3m', cintura: '98', cadera: '108', cb: '31', pct: '24', pbi: '12', psub: '28', psup: '30' },
     bio: { glucosa: '142', hba1c: '7.8', creatinina: '0.8', bun: '14', urea: '30', albumina: '4.1', fosforo: '3.6', calcio: '9.4', magnesio: '2.0', pcr: '6.2', colesterol: '218', ldl: '138', hdl: '44', tg: '195', potasio: '4.2', sodio: '139', hemoglobina: '12.8' },
     clin: { sint: { pirosis: true, distension: true }, pat: { dm2: true, hta: true, dislipidemia: true, obesidad: true }, fuerza: 'normal', hidratacion: 'normal' },
@@ -648,7 +671,21 @@ function seedPatients() {
   a.plan.eq = suggestPlan(calc(a));
   const b = mk({
     ejemplo: true,
-    gen: { nombre: 'Carlos Alberto Méndez', edad: '71', sexo: 'M', expediente: 'EJ-0002', dx: 'Enfermedad renal crónica estadio 4 sin diálisis e hipertensión arterial', motivo: 'Pérdida de peso y disminución del apetito en los últimos 3 meses', meds: 'Amlodipino 5 mg al día; carbonato de calcio; eritropoyetina' },
+    gen: {
+      nombre: 'Carlos Alberto Méndez',
+      edad: '71',
+      sexo: 'M',
+      expediente: 'EJ-0002',
+      dx: 'Enfermedad renal crónica estadio 4 sin diálisis e hipertensión arterial',
+      motivo: 'Pérdida de peso y disminución del apetito en los últimos 3 meses',
+      meds: 'Amlodipino 5 mg al día; carbonato de calcio; eritropoyetina',
+      medList: [
+        { id: 'm1', nombre: 'Amlodipino', categoria: 'Antihipertensivo', dosisFrecuencia: '5 mg al día', relacionComidas: 'indiferente', tiemposComida: ['des'], observacion: 'Evitar consumo de toronja.' },
+        { id: 'm2', nombre: 'Carbonato de calcio', categoria: 'Quelante de fósforo', dosisFrecuencia: '500 mg cada 8 h con comidas', relacionComidas: 'con_comidas', tiemposComida: ['des', 'alm', 'cen'], observacion: 'Tomar estrictamente con el primer bocado de comida para quelar fósforo.' },
+        { id: 'm3', nombre: 'Eritropoyetina (EPO)', categoria: 'Estimulante de eritropoyesis', dosisFrecuencia: '4000 UI SC semanal', relacionComidas: 'indiferente', tiemposComida: [], observacion: 'Requiere cofactores hematopoyéticos (hierro, ácido fólico, B12).' }
+      ],
+      antecedentes: 'Antecedentes familiares de nefropatía hipertensiva.'
+    },
     antro: { peso: '58', talla: '170', habitual: '66', periodo: '3m', cintura: '84', cadera: '94', cb: '24', pct: '8', pbi: '5', psub: '10', psup: '9' },
     bio: { glucosa: '96', hba1c: '5.6', creatinina: '3.4', bun: '58', urea: '124', albumina: '3.0', fosforo: '5.2', calcio: '8.2', magnesio: '2.1', pcr: '12.5', colesterol: '170', ldl: '92', hdl: '38', tg: '140', potasio: '5.3', sodio: '138', hemoglobina: '10.2' },
     clin: { sint: { nauseas: true, hiporexia: true, disgeusia: true, saciedad: true }, pat: { erc: true, hta: true }, musculo: 'moderada', grasa: 'leve', edema: '+', ascitis: 'no', fuerza: 'disminuida', hidratacion: 'normal' },
@@ -1165,7 +1202,7 @@ function Sidebar({ state, setActive, addP, onExportJson, onImportJson, onOpenClo
 }
 
 function TabPaciente({ removeP }) {
-  const { p, c, set } = useCtx();
+  const { p, c, set, upd } = useCtx();
   const [conf, setConf] = useState(false);
   const isFem = p.gen.sexo === 'F';
 
@@ -1185,10 +1222,12 @@ function TabPaciente({ removeP }) {
             <Field label="No. de expediente"><In path="gen.expediente" /></Field>
             <Field label="Diagnóstico médico" className="sm:col-span-2"><In path="gen.dx" /></Field>
             <Field label="Motivo de consulta" className="sm:col-span-2"><Area path="gen.motivo" rows={2} /></Field>
-            <Field label="Medicamentos y suplementos" className="sm:col-span-2"><Area path="gen.meds" rows={2} /></Field>
             <Field label="Antecedentes personales y familiares" className="sm:col-span-2"><Area path="gen.antecedentes" rows={2} /></Field>
           </div>
         </section>
+
+        {/* Sección Estructurada de Medicamentos y Suplementos */}
+        <MedicationsSection p={p} c={c} set={set} upd={upd} />
 
         {/* Condición Obstétrica / Gestación */}
         {isFem && (

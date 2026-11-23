@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import {
-  Calculator, Utensils, BookOpen, Sparkles, RefreshCw, Check, Search, ChevronDown, ChevronUp, ArrowRight, ShieldCheck, DollarSign, AlertCircle
+  Calculator, Utensils, BookOpen, Sparkles, RefreshCw, Check, Search, ChevronDown, ChevronUp, ArrowRight, ShieldCheck, DollarSign, AlertCircle, Clock, Pill as PillIcon
 } from 'lucide-react';
 import {
   EXCHANGE_GROUPS, MEAL_TIMES, FOOD_EXCHANGE_CATALOG, generateMealMenuFromExchanges
@@ -1017,6 +1017,10 @@ export default function ExchangePlanSection({ p, c, set, upd, Pill }) {
           {distCalc.mealTotals.map((mt) => {
             const sugText = suggestedMenus[mt.k];
             const currentMenu = (p.plan.menu && p.plan.menu[mt.k]) || '';
+            const mealMeds = (Array.isArray(p.gen?.medList) ? p.gen.medList : []).filter(
+              m => Array.isArray(m.tiemposComida) && m.tiemposComida.includes(mt.k)
+            );
+
             return (
               <div key={mt.k} className="rounded-lg border border-line p-4 flex flex-col justify-between bg-surface">
                 <div>
@@ -1026,6 +1030,25 @@ export default function ExchangePlanSection({ p, c, set, upd, Pill }) {
                       {f0(mt.kcal)} kcal ({f1(mt.pctVct)}%)
                     </span>
                   </div>
+
+                  {/* Fármacos / suplementos programados en este tiempo */}
+                  {mealMeds.length > 0 && (
+                    <div className="mb-2.5 p-2 rounded bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 text-xs">
+                      <div className="flex items-center gap-1 font-semibold text-amber-800 dark:text-amber-300 text-[11px] mb-1">
+                        <Clock className="w-3 h-3" /> Fármacos en {mt.n}:
+                      </div>
+                      <div className="space-y-0.5">
+                        {mealMeds.map(med => (
+                          <div key={med.id || med.nombre} className="text-[11px] text-ink flex items-center justify-between">
+                            <span>• <strong>{med.nombre}</strong> {med.dosisFrecuencia ? `(${med.dosisFrecuencia})` : ''}</span>
+                            <span className="text-[10px] text-muted italic">
+                              {med.relacionComidas === 'con_comidas' ? 'Con comida' : med.relacionComidas === 'en_ayunas' ? 'En ayunas' : ''}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Resumen de intercambios del tiempo */}
                   <div className="mb-3">
