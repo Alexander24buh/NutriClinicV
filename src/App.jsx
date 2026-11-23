@@ -529,7 +529,7 @@ const blankPatient = () => ({
   dieta: { rec: {}, ingesta: '', kcalEst: '', protEst: '', agua: '', alcohol: '', tabaco: '', suplementos: '', alergias: '', apetito: '', actividad: '', frec: {}, notas: '' },
   req: { formula: 'mifflin', pesoBase: 'real', kcalkg: '30', actKey: 'sed', actVal: '1.2', estKey: 'none', estVal: '1', ajuste: '0', modo: 'pct', pct: { p: '15', c: '55', l: '30' }, gkg: { p: '1', c: '4', l: '1' }, liq: '30' },
   pes: { items: [] },
-  plan: { totals: {}, eq: {}, vals: {}, menu: {}, objetivos: '', recs: '', indicadores: '', proxima: '', seg: [], riss: { primaryDiet: 'normal', secondaryDiets: [], justificacion: '' } },
+  plan: { totals: {}, eq: {}, vals: {}, menu: {}, objetivos: '', recs: '', indicadores: '', proxima: '', seg: [], costLevel: 'regular', riss: { primaryDiet: 'normal', secondaryDiets: [], justificacion: '' } },
 });
 
 function seedPatients() {
@@ -549,6 +549,7 @@ function seedPatients() {
       ]
     },
     plan: {
+      costLevel: 'economico',
       riss: {
         primaryDiet: 'blanda',
         secondaryDiets: ['hipocalorica', 'baja_cho', 'baja_grasa', 'hiposodica_leve'],
@@ -578,6 +579,7 @@ function seedPatients() {
       ]
     },
     plan: {
+      costLevel: 'economico',
       riss: {
         primaryDiet: 'blanda',
         secondaryDiets: ['hipoproteica', 'baja_potasio', 'baja_fosforo', 'hiposodica_moderada'],

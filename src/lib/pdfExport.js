@@ -408,14 +408,21 @@ export function exportClinicalReportPDF({ p, c, SINT, PATOL, RECALL, FORMULAS, p
     }
 
     if (hasMenu) {
+      const costLevelMap = {
+        economico: 'Económico ($)',
+        regular: 'Regular ($$)',
+        costoso: 'Más costoso ($$$)'
+      };
+      const activeCostStr = costLevelMap[p.plan?.costLevel] || 'Regular ($$)';
+
       autoTable(doc, {
         startY: y,
         margin: { left: margin, right: margin },
         theme: 'grid',
         styles: { fontSize: 8.2, cellPadding: 2.2, textColor: inkColor, lineColor: [211, 224, 226] },
         headStyles: { fillColor: brandColor, textColor: [255, 255, 255], fontStyle: 'bold' },
-        columnStyles: { 0: { cellWidth: 35, fontStyle: 'bold', fillColor: [248, 250, 251] } },
-        head: [['Tiempo de Comida', 'Opciones de Alimentos y Tamaño de Porción']],
+        columnStyles: { 0: { cellWidth: 38, fontStyle: 'bold', fillColor: [248, 250, 251] } },
+        head: [[`Tiempo de Comida (${activeCostStr})`, 'Plato Típico Salvadoreño Adaptado (Porciones e Intercambios)']],
         body: MEAL_TIMES
           .filter(mt => p.plan?.menu?.[mt.k])
           .map(mt => [mt.n, cleanStr(p.plan.menu[mt.k])])
