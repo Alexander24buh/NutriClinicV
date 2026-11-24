@@ -587,8 +587,40 @@ export function evaluateRissDietRecommendation(p, c) {
   const primaryDiet = { id: 'normal', name: 'Dieta normal o corriente', reason: 'Condición clínica basal estable sin compromiso digestivo o metabólico severo.' };
   const secondaryDiets = [];
 
-  const isEmbarazada = Boolean(g.embarazada || num(g.semGestacional) > 0);
-  const isPediatrico = !isEmbarazada && ((g.edad != null && num(g.edad) < 19) || (g.edadMeses != null && num(g.edadMeses) < 228));
+  // Detección estricta de condición fisiológica (evita falsos positivos pediátricos en adultos)
+  const edadAnos = num(g.edad);
+  const edadMeses = num(g.edadMeses);
+  const modelo = g.modeloEvaluacion || (c && c.modeloEvaluacion) || 'auto';
+
+  let isEmbarazada = false;
+  let isPediatrico = false;
+  let isAdulto = false;
+
+  if (c && c.isAdulto !== undefined) {
+    isAdulto = Boolean(c.isAdulto);
+    isEmbarazada = Boolean(c.isEmbarazada);
+    isPediatrico = Boolean(c.isPediatrico);
+  } else if (modelo === 'adulto' || (edadAnos != null && edadAnos >= 19)) {
+    isAdulto = true;
+    isEmbarazada = false;
+    isPediatrico = false;
+  } else if (modelo === 'embarazada' || Boolean(g.embarazada && g.sexo === 'F')) {
+    isEmbarazada = true;
+    isAdulto = false;
+    isPediatrico = false;
+  } else if (modelo === 'pediatrico' || (edadAnos != null && edadAnos < 19) || (edadMeses != null && edadMeses > 0 && edadAnos == null)) {
+    isPediatrico = true;
+    isAdulto = false;
+    isEmbarazada = false;
+  } else {
+    isAdulto = true;
+  }
+
+  // Garantía clínica absoluta: Paciente con 19 años o más JAMÁS es pediátrico
+  if (edadAnos != null && edadAnos >= 19) {
+    isPediatrico = false;
+    if (!isEmbarazada) isAdulto = true;
+  }
 
   if (isEmbarazada) {
     primaryDiet.id = 'embarazada';

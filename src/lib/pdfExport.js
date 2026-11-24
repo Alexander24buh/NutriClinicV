@@ -528,7 +528,21 @@ export function exportClinicalReportPDF({ p, c, SINT, PATOL, RECALL, FORMULAS, p
     }
 
     if (p.plan?.recs) {
-      const recsList = p.plan.recs.split('\n').filter(Boolean).map(r => `• ${cleanStr(r)}`).join('\n');
+      const recsList = p.plan.recs
+        .split('\n')
+        .map(l => l.trim())
+        .filter(Boolean)
+        .map(r => {
+          const cleaned = cleanStr(r);
+          if (cleaned.startsWith('---') || cleaned.startsWith('===')) {
+            return `\n[ ${cleaned.replace(/[-=]/g, '').trim()} ]`;
+          }
+          if (cleaned.startsWith('•') || cleaned.startsWith('-') || cleaned.startsWith('*')) {
+            return cleaned;
+          }
+          return `• ${cleaned}`;
+        })
+        .join('\n');
       autoTable(doc, {
         startY: y,
         margin: { left: margin, right: margin },

@@ -18,6 +18,7 @@ import GrowthChartsView from './components/GrowthChartsView.jsx';
 import MedicationsSection from './components/MedicationsSection.jsx';
 import ExchangePlanSection from './components/ExchangePlanSection.jsx';
 import ClinicalNoteModal from './components/ClinicalNoteModal.jsx';
+import PatientRecommendationsSection from './components/PatientRecommendationsSection.jsx';
 import { exportClinicalReportPDF } from './lib/pdfExport.js';
 
 // ==== LOGIC START ====
@@ -232,6 +233,11 @@ function calc(p) {
     } else {
       modelo = 'adulto';
     }
+  }
+
+  // Regla médica estricta: Pacientes con 19 años o más no son evaluados bajo modelo pediátrico
+  if (edad != null && edad >= 19 && modelo === 'pediatrico') {
+    modelo = 'adulto';
   }
 
   const isEmbarazada = modelo === 'embarazada' && sexo === 'F';
@@ -2224,19 +2230,13 @@ function TabPlan() {
       {/* Modelo de Cálculo de Intercambios, Distribución por Tiempos y Sugerencias de Alimentos */}
       <ExchangePlanSection p={p} c={c} set={set} upd={upd} Pill={Pill} />
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <section className="card p-5">
-          <h3 className="h3">Objetivos del plan</h3>
-          <Area path="plan.objetivos" rows={5} placeholder="Metas de peso, control metabólico y plazos" />
-        </section>
-        <section className="card p-5">
-          <h3 className="h3">Recomendaciones personalizadas</h3>
-          <Area path="plan.recs" rows={5} placeholder="Una recomendación por línea" />
-          <div className="flex flex-wrap gap-1.5 mt-3">
-            {REC_SUG.map(t => <button key={t} className="chipbtn" onClick={() => addRec(t)}>{t}</button>)}
-          </div>
-        </section>
-      </div>
+      <section className="card p-5">
+        <h3 className="h3">Objetivos del plan</h3>
+        <Area path="plan.objetivos" rows={3} placeholder="Metas de peso, control metabólico y plazos" />
+      </section>
+
+      {/* Sección Estructurada de Recomendaciones Clínicas y Guías por Patología */}
+      <PatientRecommendationsSection p={p} c={c} set={set} upd={upd} />
 
       <section className="card p-5">
         <h3 className="h3">Seguimiento</h3>

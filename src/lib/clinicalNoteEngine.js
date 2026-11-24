@@ -316,6 +316,25 @@ export function generateClinicalNoteData(p, c) {
     eduParagraphs.push(`Coordinación farmacológica: Sincronizar los medicamentos prescritos (${medNotes}) según los horarios de comidas establecidos para evitar interferencias en su absorción.`);
   }
 
+  // Párrafo 7: Recomendaciones clínicas específicas prescritas en el plan del paciente
+  if (p.plan?.recs && p.plan.recs.trim()) {
+    const rawLines = p.plan.recs
+      .split('\n')
+      .map(l => l.trim())
+      .filter(Boolean);
+
+    if (rawLines.length > 0) {
+      eduParagraphs.push('Recomendaciones dietoterapéuticas específicas prescritas al paciente:');
+      rawLines.forEach(l => {
+        if (l.startsWith('---') || l.startsWith('===')) {
+          eduParagraphs.push(`[${l.replace(/[-=]/g, '').trim()}]:`);
+        } else {
+          eduParagraphs.push(l.startsWith('•') || l.startsWith('-') ? l : `• ${l}`);
+        }
+      });
+    }
+  }
+
   // Generar texto plano completo (para visualización, copiado o edición rápida)
   const fullRawText = [
     headerLine1,

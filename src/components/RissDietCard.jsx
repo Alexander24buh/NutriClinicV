@@ -11,7 +11,7 @@ export default function RissDietCard({ p, c, set, upd }) {
   // Evaluación automática con base en los datos clínicos del paciente
   const autoRec = useMemo(() => {
     return evaluateRissDietRecommendation(p, c);
-  }, [p.gen, p.antro, p.bio, p.clin, c.imc, c.egfr, c.tamizaje]);
+  }, [p.gen, p.antro, p.bio, p.clin, c.imc, c.egfr, c.tamizaje, c.isAdulto, c.isPediatrico, c.isEmbarazada]);
 
   const currentRiss = p.plan?.riss || {
     primaryDiet: autoRec.primaryDiet.id,
