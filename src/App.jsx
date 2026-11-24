@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect, useCallback, useContext, createCon
 import {
   Plus, Trash2, Copy, Check as CheckIcon, Sun, Moon, Cloud, CloudOff,
   Download, Upload, Search, Database, AlertTriangle, RefreshCw, X, ExternalLink, Activity,
-  FileDown, Printer, CheckCircle2
+  FileDown, Printer, CheckCircle2, FileText
 } from 'lucide-react';
 import {
   getCloudConfig, saveCloudConfig, isCloudConfigured, testCloudConnection,
@@ -17,6 +17,7 @@ import { evaluateMedicationAlerts } from './data/drugFoodInteractions.js';
 import GrowthChartsView from './components/GrowthChartsView.jsx';
 import MedicationsSection from './components/MedicationsSection.jsx';
 import ExchangePlanSection from './components/ExchangePlanSection.jsx';
+import ClinicalNoteModal from './components/ClinicalNoteModal.jsx';
 import { exportClinicalReportPDF } from './lib/pdfExport.js';
 
 // ==== LOGIC START ====
@@ -614,7 +615,7 @@ function suggestPlan(o) {
 const blankPatient = () => ({
   id: uid(),
   ejemplo: false,
-  gen: { nombre: '', edad: '', edadMeses: '', sexo: '', fecha: today(), expediente: '', dx: '', motivo: '', meds: '', medList: [], antecedentes: '', embarazada: false, semGestacional: '', pesoPregestacional: '' },
+  gen: { nombre: '', edad: '', edadMeses: '', sexo: '', fecha: today(), expediente: '', dx: '', motivo: '', servicio: '', cama: '', deih: '', diaEvolucion: '', responsable: '', orientacion: '', obstetricos: '', meds: '', medList: [], antecedentes: '', embarazada: false, semGestacional: '', pesoPregestacional: '' },
   antro: { peso: '', talla: '', habitual: '', periodo: '3m', cintura: '', cadera: '', cb: '', pct: '', pbi: '', psub: '', psup: '', pc: '', longitudTipo: 'de_pie' },
   bio: { glucosa: '', hba1c: '', creatinina: '', bun: '', urea: '', albumina: '', fosforo: '', calcio: '', magnesio: '', pcr: '', colesterol: '', ldl: '', hdl: '', tg: '', potasio: '', sodio: '', hemoglobina: '' },
   clin: { sint: {}, pat: {}, musculo: 'normal', grasa: 'normal', edema: 'no', ascitis: 'no', fuerza: '', hidratacion: '', piel: '', oral: '', otros: '' },
@@ -633,6 +634,13 @@ function seedPatients() {
       edad: '54',
       sexo: 'F',
       expediente: 'EJ-0001',
+      servicio: 'Medicina Interna Mujeres',
+      cama: '12',
+      deih: '4°',
+      diaEvolucion: '6°',
+      responsable: 'Lic. Alexa / Nutricionista Clínico',
+      orientacion: 'orientada y colaboradora durante la evaluación nutricional',
+      obstetricos: 'G2, P2, A0, V2',
       dx: 'Diabetes mellitus tipo 2, obesidad grado I e hipertensión arterial',
       motivo: 'Control glucémico y reducción de peso',
       meds: 'Metformina 850 mg cada 12 h; losartán 50 mg al día',
@@ -676,6 +684,12 @@ function seedPatients() {
       edad: '71',
       sexo: 'M',
       expediente: 'EJ-0002',
+      servicio: 'Nefrología / Hospitalización Adultos',
+      cama: '08',
+      deih: '2°',
+      diaEvolucion: '4°',
+      responsable: 'Lic. Alexa / Nutricionista Clínico',
+      orientacion: 'orientado y colaborador durante el interrogatorio clínico',
       dx: 'Enfermedad renal crónica estadio 4 sin diálisis e hipertensión arterial',
       motivo: 'Pérdida de peso y disminución del apetito en los últimos 3 meses',
       meds: 'Amlodipino 5 mg al día; carbonato de calcio; eritropoyetina',
@@ -1038,7 +1052,7 @@ function SaveStatusBadge({ saveStatus, lastSavedAt, isCloudActive }) {
   );
 }
 
-function Header({ tab, setTab, theme, toggleTheme, onOpenCloud, isCloudActive, saveStatus, lastSavedAt }) {
+function Header({ tab, setTab, theme, toggleTheme, onOpenCloud, isCloudActive, saveStatus, lastSavedAt, onOpenNoteModal }) {
   const { p, c } = useCtx();
   return (
     <header className="sticky z-30 bg-surface border-b border-line no-print" style={{ top: 'env(safe-area-inset-top, 0px)' }}>
@@ -1068,6 +1082,15 @@ function Header({ tab, setTab, theme, toggleTheme, onOpenCloud, isCloudActive, s
             </div>
 
             <div className="flex items-center gap-2">
+              <button
+                className="btn btn-sm btn-primary text-xs flex items-center gap-1.5 shadow-sm"
+                onClick={onOpenNoteModal}
+                title="Generar nota de atención nutricional hospitalaria editable en Word (.docx)"
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span className="hidden md:inline">Generar nota nutricional</span>
+              </button>
+
               <button
                 className={`btn btn-sm ${isCloudActive ? 'border-brand text-brand' : ''}`}
                 onClick={onOpenCloud}
@@ -1220,6 +1243,13 @@ function TabPaciente({ removeP }) {
             <Field label="Sexo"><Sel path="gen.sexo" options={[['', 'Seleccione'], ['F', 'Femenino'], ['M', 'Masculino']]} /></Field>
             <Field label="Fecha de consulta"><In path="gen.fecha" type="date"/></Field>
             <Field label="No. de expediente"><In path="gen.expediente" /></Field>
+            <Field label="Servicio / Unidad hospitalaria"><In path="gen.servicio" placeholder="Ej. Medicina Interna, Cirugía..." /></Field>
+            <div className="grid grid-cols-3 gap-2">
+              <Field label="No. Cama"><In path="gen.cama" placeholder="12" /></Field>
+              <Field label="DEIH"><In path="gen.deih" placeholder="4°" hint="Días Estancia Hosp." /></Field>
+              <Field label="Día Evol."><In path="gen.diaEvolucion" placeholder="6°" /></Field>
+            </div>
+            <Field label="Responsable de la nota" className="sm:col-span-2"><In path="gen.responsable" placeholder="Lic. / Nutricionista Clínico" /></Field>
             <Field label="Diagnóstico médico" className="sm:col-span-2"><In path="gen.dx" /></Field>
             <Field label="Motivo de consulta" className="sm:col-span-2"><Area path="gen.motivo" rows={2} /></Field>
             <Field label="Antecedentes personales y familiares" className="sm:col-span-2"><Area path="gen.antecedentes" rows={2} /></Field>
@@ -2223,7 +2253,7 @@ function KV({ k, v }) {
   );
 }
 
-function TabReporte() {
+function TabReporte({ onOpenNoteModal }) {
   const { p, c } = useCtx();
   const [state, setState] = useState('');
   const [txt, setTxt] = useState(null);
@@ -2283,7 +2313,12 @@ function TabReporte() {
   return (
     <div className="grid gap-4">
       <div className="flex flex-wrap items-center gap-3 no-print">
-        <button className="btn btn-primary" onClick={handleExportPdf} disabled={exportingPdf}>
+        {onOpenNoteModal && (
+          <button className="btn btn-primary shadow-sm" onClick={onOpenNoteModal} title="Generar nota clínica editable en formato Word (.docx)">
+            <FileText className="w-4 h-4 mr-1.5" /> Generar nota nutricional (.docx)
+          </button>
+        )}
+        <button className="btn" onClick={handleExportPdf} disabled={exportingPdf}>
           <FileDown className="w-4 h-4 mr-1" /> {exportingPdf ? 'Generando PDF...' : 'Descargar PDF Clínico'}
         </button>
         <button className="btn" onClick={() => window.print()}>
@@ -2771,6 +2806,7 @@ export default function App() {
     return localStorage.getItem(THEME_KEY) || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
   });
   const [isCloudOpen, setIsCloudOpen] = useState(false);
+  const [isNoteModalOpen, setIsNoteModalOpen] = useState(false);
   const [saveStatus, setSaveStatus] = useState('saved_local');
   const [lastSavedAt, setLastSavedAt] = useState(formatTimeHHMM);
   const isCloudActive = isCloudConfigured();
@@ -2924,6 +2960,7 @@ export default function App() {
         isCloudActive={isCloudActive}
         saveStatus={saveStatus}
         lastSavedAt={lastSavedAt}
+        onOpenNoteModal={() => setIsNoteModalOpen(true)}
       />
       <div className="print-layout mx-auto max-w-[1400px] px-4 sm:px-6 py-5 grid gap-5 lg:grid-cols-[16.5rem_minmax(0,1fr)]">
         <Sidebar
@@ -2941,7 +2978,7 @@ export default function App() {
           {tab === 'req' && <TabReq />}
           {tab === 'pes' && <TabPES />}
           {tab === 'plan' && <TabPlan />}
-          {tab === 'reporte' && <TabReporte />}
+          {tab === 'reporte' && <TabReporte onOpenNoteModal={() => setIsNoteModalOpen(true)} />}
           <p className="hint mt-6 no-print">Herramienta de apoyo para profesionales de la nutrición clínica. Los cálculos son orientativos y no reemplazan el juicio clínico.</p>
         </main>
       </div>
@@ -2951,6 +2988,15 @@ export default function App() {
         onClose={() => setIsCloudOpen(false)}
         patients={state.patients}
         onPatientsUpdated={handlePatientsFromCloud}
+      />
+
+      <ClinicalNoteModal
+        isOpen={isNoteModalOpen}
+        onClose={() => setIsNoteModalOpen(false)}
+        p={p}
+        c={c}
+        set={set}
+        upd={upd}
       />
     </Ctx.Provider>
   );
