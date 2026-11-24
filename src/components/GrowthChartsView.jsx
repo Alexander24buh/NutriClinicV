@@ -31,13 +31,18 @@ export default function GrowthChartsView({ p, c, set, upd }) {
   const pc = num(a.pc);
   const sexo = g.sexo === 'F' ? 'F' : 'M';
 
-  // Determinación automática del modelo de evaluación
+  // Determinación del modelo de evaluación (respetando la selección manual del clínico)
   const evaluationModel = useMemo(() => {
-    if (isEmbarazada) return 'embarazada';
-    if (edadAnos != null && edadAnos < 19) return 'pediatrico';
-    if (edadMeses != null && edadMeses < 228) return 'pediatrico';
+    if (g.modeloEvaluacion && g.modeloEvaluacion !== 'auto') {
+      return g.modeloEvaluacion;
+    }
+    if (c.modeloEvaluacion && c.modeloEvaluacion !== 'auto') {
+      return c.modeloEvaluacion;
+    }
+    if (isEmbarazada && sexo === 'F') return 'embarazada';
+    if ((edadAnos != null && edadAnos < 19) || (edadMeses != null && edadMeses > 0 && (edadAnos == null || edadAnos < 19))) return 'pediatrico';
     return 'adulto';
-  }, [isEmbarazada, edadAnos, edadMeses]);
+  }, [g.modeloEvaluacion, c.modeloEvaluacion, isEmbarazada, sexo, edadAnos, edadMeses]);
 
   // Subindicador activo para pediatría
   const defaultPediatricSub = useMemo(() => {
@@ -460,6 +465,160 @@ export default function GrowthChartsView({ p, c, set, upd }) {
     );
   };
 
+  // ==== RENDERIZADOR DE EVALUACIÓN ANTROPOMÉTRICA DE ADULTO ====
+  const renderAdultChart = () => {
+    const isAdultoMayor = edadAnos != null && edadAnos >= 65;
+    const currentImc = imc;
+    const imcSecoVal = c.imcSeco;
+
+    // Rango visual para la barra de IMC: 14 a 44 kg/m²
+    const minVal = 14, maxVal = 44;
+    const getPosPct = v => Math.min(100, Math.max(0, ((v - minVal) / (maxVal - minVal)) * 100));
+
+    // Rangos según OMS convencional o OPS Adulto Mayor
+    const ranges = isAdultoMayor ? [
+      { name: 'Bajo peso', from: 14, to: 23, color: '#38bdf8' },
+      { name: 'Normal (OPS)', from: 23, to: 28, color: '#22c55e' },
+      { name: 'Sobrepeso', from: 28, to: 32, color: '#eab308' },
+      { name: 'Obesidad', from: 32, to: 44, color: '#ef4444' },
+    ] : [
+      { name: 'Bajo peso', from: 14, to: 18.5, color: '#38bdf8' },
+      { name: 'Normal (OMS)', from: 18.5, to: 24.9, color: '#22c55e' },
+      { name: 'Sobrepeso', from: 25.0, to: 29.9, color: '#eab308' },
+      { name: 'Obesidad I', from: 30.0, to: 34.9, color: '#f97316' },
+      { name: 'Obesidad II', from: 35.0, to: 39.9, color: '#ef4444' },
+      { name: 'Obesidad III', from: 40.0, to: 44, color: '#991b1b' },
+    ];
+
+    const markerPct = currentImc ? getPosPct(currentImc) : null;
+    const secoMarkerPct = imcSecoVal ? getPosPct(imcSecoVal) : null;
+
+    return (
+      <div className="space-y-4">
+        {/* Calibrador de IMC en Adulto */}
+        <div className="p-4 bg-sunken rounded-xl border border-line">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <div>
+              <span className="text-xs font-bold text-ink uppercase tracking-wider">
+                Calibrador Visual de IMC {isAdultoMayor ? '(Criterios OPS · Adulto Mayor ≥ 65 años)' : '(Puntos de Corte Estándar OMS)'}
+              </span>
+              <div className="text-[11px] text-muted">
+                {isAdultoMayor
+                  ? 'Bajo peso < 23 · Normal 23 a 28 · Sobrepeso 28 a 32 · Obesidad > 32 kg/m²'
+                  : 'Bajo peso < 18.5 · Normal 18.5 a 24.9 · Sobrepeso 25 a 29.9 · Obesidad ≥ 30 kg/m²'}
+              </div>
+            </div>
+            {c.imcCl && (
+              <span className={`pill ${c.imcCl.level} text-xs font-bold`}>
+                IMC: {f1(currentImc)} kg/m² · {c.imcCl.label}
+              </span>
+            )}
+          </div>
+
+          {/* Barra Visual de Espectro de IMC */}
+          <div className="relative pt-6 pb-2">
+            {/* Marcador del Paciente */}
+            {markerPct != null && (
+              <div
+                className="absolute top-0 -translate-x-1/2 flex flex-col items-center transition-all duration-300 z-10"
+                style={{ left: `${markerPct}%` }}
+              >
+                <div className="px-2 py-0.5 rounded bg-ink text-surface text-[10px] font-bold shadow-sm whitespace-nowrap">
+                  {f1(currentImc)} kg/m²
+                </div>
+                <div className="w-0 h-0 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-t-[5px] border-t-ink" />
+              </div>
+            )}
+
+            {/* Barra de segmentos */}
+            <div className="h-6 w-full rounded-md overflow-hidden flex shadow-inner border border-line">
+              {ranges.map(rg => {
+                const wPct = ((rg.to - rg.from) / (maxVal - minVal)) * 100;
+                return (
+                  <div
+                    key={rg.name}
+                    style={{ width: `${wPct}%`, backgroundColor: rg.color }}
+                    className="h-full relative group transition-opacity hover:opacity-90 flex items-center justify-center text-[10px] font-semibold text-white drop-shadow"
+                    title={`${rg.name}: ${rg.from} - ${rg.to} kg/m²`}
+                  >
+                    <span className="hidden sm:inline truncate px-1">{rg.name}</span>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Si existe Peso Seco, marcador secundario */}
+            {secoMarkerPct != null && (
+              <div
+                className="absolute bottom-[-14px] -translate-x-1/2 flex flex-col items-center transition-all duration-300 z-10"
+                style={{ left: `${secoMarkerPct}%` }}
+              >
+                <div className="w-0 h-0 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-b-[5px] border-b-brand" />
+                <div className="px-1.5 py-0.2 rounded bg-brand text-white text-[9px] font-bold shadow-xs whitespace-nowrap">
+                  Seco: {f1(imcSecoVal)}
+                </div>
+              </div>
+            )}
+
+            {/* Escala numérica inferior */}
+            <div className="flex justify-between text-[10px] text-muted num mt-1 px-1">
+              <span>14</span>
+              <span>18.5</span>
+              <span>25.0</span>
+              <span>30.0</span>
+              <span>35.0</span>
+              <span>40+</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Tarjetas de Parámetros Antropométricos de Adulto */}
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="p-3 bg-surface rounded-lg border border-line shadow-2xs">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs font-semibold text-ink">Circunferencia de Cintura</span>
+              {c.cinturaCl && <span className={`pill ${c.cinturaCl.level} text-[10px]`}>{c.cinturaCl.label}</span>}
+            </div>
+            <div className="flex items-baseline gap-1.5">
+              <span className="num text-2xl font-bold text-ink">{c.cintura != null ? f1(c.cintura) : '—'}</span>
+              <span className="text-xs text-muted">cm</span>
+            </div>
+            <div className="text-[11px] text-muted mt-1">
+              {sexo === 'M' ? 'Corte: Normal < 94 · Riesgo ≥ 102 cm' : 'Corte: Normal < 80 · Riesgo ≥ 88 cm'}
+            </div>
+          </div>
+
+          <div className="p-3 bg-surface rounded-lg border border-line shadow-2xs">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs font-semibold text-ink">Índice Cintura / Cadera</span>
+              {c.iccCl && <span className={`pill ${c.iccCl.level} text-[10px]`}>{c.iccCl.label}</span>}
+            </div>
+            <div className="flex items-baseline gap-1.5">
+              <span className="num text-2xl font-bold text-ink">{c.icc != null ? f2(c.icc) : '—'}</span>
+            </div>
+            <div className="text-[11px] text-muted mt-1">
+              {sexo === 'M' ? 'Límite normal: ≤ 0.90 (Androide si > 0.90)' : 'Límite normal: ≤ 0.85 (Androide si > 0.85)'}
+            </div>
+          </div>
+
+          <div className="p-3 bg-surface rounded-lg border border-line shadow-2xs">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs font-semibold text-ink">Masa Muscular / Grasa</span>
+              {c.gc != null && <span className="pill ok text-[10px]">{f1(c.gc)}% grasa</span>}
+            </div>
+            <div className="flex items-baseline gap-1.5">
+              <span className="num text-lg font-bold text-ink">{c.ambc != null ? `${f1(c.ambc)} cm²` : '—'}</span>
+              <span className="text-[11px] text-muted">cAMB (Heymsfield)</span>
+            </div>
+            <div className="text-[11px] text-muted mt-1">
+              {c.pesoSeco != null ? `Peso seco activo: ${f1(c.pesoSeco)} kg` : (c.pAj != null ? `Peso ajustado: ${f1(c.pAj)} kg` : 'Reserva muscular y grasa')}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="card p-5 border-l-4 border-l-brand bg-surface">
       {/* Encabezado del Módulo Antropométrico Gráfico */}
@@ -496,30 +655,30 @@ export default function GrowthChartsView({ p, c, set, upd }) {
           <div className="inline-flex rounded-lg shadow-2xs border border-line p-0.5 bg-sunken">
             <button
               type="button"
-              className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-all ${evaluationModel === 'embarazada' ? 'bg-brand text-white shadow-xs' : 'text-muted hover:text-ink'}`}
+              className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${evaluationModel === 'adulto' ? 'bg-brand text-white shadow-xs' : 'text-muted hover:text-ink'}`}
               onClick={() => {
-                upd(x => ({ ...x, gen: { ...x.gen, embarazada: true } }));
+                upd(x => ({ ...x, gen: { ...x.gen, modeloEvaluacion: 'adulto', embarazada: false } }));
               }}
             >
-              Embarazada
+              Adulto
             </button>
             <button
               type="button"
-              className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-all ${evaluationModel === 'pediatrico' ? 'bg-brand text-white shadow-xs' : 'text-muted hover:text-ink'}`}
+              className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${evaluationModel === 'pediatrico' ? 'bg-brand text-white shadow-xs' : 'text-muted hover:text-ink'}`}
               onClick={() => {
-                upd(x => ({ ...x, gen: { ...x.gen, embarazada: false, edad: x.gen.edad && num(x.gen.edad) < 19 ? x.gen.edad : '12' } }));
+                upd(x => ({ ...x, gen: { ...x.gen, modeloEvaluacion: 'pediatrico', embarazada: false, edad: x.gen.edad && num(x.gen.edad) < 19 ? x.gen.edad : (x.gen.edad || '12') } }));
               }}
             >
               Pediatría
             </button>
             <button
               type="button"
-              className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-all ${evaluationModel === 'adulto' ? 'bg-brand text-white shadow-xs' : 'text-muted hover:text-ink'}`}
+              className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${evaluationModel === 'embarazada' ? 'bg-brand text-white shadow-xs' : 'text-muted hover:text-ink'}`}
               onClick={() => {
-                upd(x => ({ ...x, gen: { ...x.gen, embarazada: false, edad: x.gen.edad && num(x.gen.edad) >= 19 ? x.gen.edad : '35' } }));
+                upd(x => ({ ...x, gen: { ...x.gen, modeloEvaluacion: 'embarazada', embarazada: true, sexo: 'F' } }));
               }}
             >
-              Adulto
+              Embarazada
             </button>
           </div>
         </div>
@@ -616,14 +775,7 @@ export default function GrowthChartsView({ p, c, set, upd }) {
       <div className="mb-4">
         {evaluationModel === 'embarazada' && renderPregnancyChart()}
         {evaluationModel === 'pediatrico' && renderPediatricChart()}
-        {evaluationModel === 'adulto' && (
-          <div className="p-4 bg-sunken rounded-lg border border-line text-xs">
-            <h4 className="font-bold text-ink mb-1">Evaluación Antropométrica de Adulto (Estándar OMS)</h4>
-            <p className="text-muted leading-relaxed">
-              El paciente adulto es evaluado con los puntos de corte estándar de la OMS (IMC &lt; 18.5 Bajo peso, 18.5–24.9 Normal, 25–29.9 Sobrepeso, &ge; 30 Obesidad), circunferencia de cintura, área muscular del brazo corregida (Heymsfield) y grasa corporal (Durnin-Womersley).
-            </p>
-          </div>
-        )}
+        {evaluationModel === 'adulto' && renderAdultChart()}
       </div>
 
       {/* Diagnóstico Antropométrico y Conexión en Cascada con el PAN */}
@@ -643,6 +795,11 @@ export default function GrowthChartsView({ p, c, set, upd }) {
           {evaluationModel === 'pediatrico' && pediatricResult && (
             <span className={`pill ${pediatricResult.level} text-xs font-bold`}>
               {pediatricResult.primaryDiagnosis}
+            </span>
+          )}
+          {evaluationModel === 'adulto' && c.imcCl && (
+            <span className={`pill ${c.imcCl.level} text-xs font-bold`}>
+              {c.imcCl.label}
             </span>
           )}
         </div>
@@ -680,8 +837,21 @@ export default function GrowthChartsView({ p, c, set, upd }) {
         )}
 
         {evaluationModel === 'adulto' && (
-          <div className="text-xs text-ink">
-            IMC actual de <strong>{f1(c.imc)} kg/m²</strong> ({c.imcCl?.label || 'Sin datos'}), evaluado con puntos de corte convencionales para adultos.
+          <div className="text-xs text-ink space-y-1.5 leading-relaxed">
+            <div>
+              <strong>Diagnóstico Antropométrico de Adulto:</strong> Paciente clasificado en <strong>{c.imcCl?.label || 'Sin clasificar'}</strong> con un IMC de <strong>{f1(c.imc)} kg/m²</strong> ({c.imcEscala}).
+              {c.pesoSeco != null && (
+                <span> · Con peso seco ({f1(c.pesoSeco)} kg): IMC {f1(c.imcSeco)} kg/m².</span>
+              )}
+            </div>
+            {c.cinturaCl && (
+              <div>
+                <strong>Riesgo Cardiovascular (Cintura):</strong> {f1(c.cintura)} cm — <strong>{c.cinturaCl.label}</strong> {c.icc != null ? `(ICC: ${f2(c.icc)} · distribución ${c.iccCl?.label || ''})` : ''}.
+              </div>
+            )}
+            <div className="text-muted pt-1 border-t border-line">
+              <strong>Impacto en Requerimientos y Prescripción:</strong> Determinación del peso de cálculo (peso real, seco, ideal Hamwi o ajustado en obesidad), cálculo de gasto energético con factor de actividad física, factor de estrés y <strong>Factor Térmico de los Alimentos (ETA)</strong>, cuadrando la distribución de macronutrientes e intercambios con los lineamientos de la RIISS.
+            </div>
           </div>
         )}
       </div>

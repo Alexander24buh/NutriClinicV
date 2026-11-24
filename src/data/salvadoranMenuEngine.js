@@ -284,12 +284,13 @@ const SALVADORAN_ITEMS = {
   }
 };
 
-// Generador de menús salvadoreños en 5 tiempos según intercambios, nivel de costo y reglas RIISS
+// Generador de menús salvadoreños en 3, 4 o 5 tiempos según intercambios, nivel de costo y reglas RIISS
 export function generateSalvadoranMenu({
   eqMap = {},
   costLevel = 'regular',
   rissData = {},
-  variantIndex = 0
+  variantIndex = 0,
+  snackConfig = 'both'
 }) {
   const catalog = SALVADORAN_ITEMS[costLevel] || SALVADORAN_ITEMS.regular;
   const result = {};
@@ -300,6 +301,17 @@ export function generateSalvadoranMenu({
 
   MEAL_TIMES.forEach((meal, mIdx) => {
     const mk = meal.k;
+
+    // Si la merienda fue eliminada / desactivada por el paciente, no generar menú
+    if (mk === 'c1' && (snackConfig === 'pm_only' || snackConfig === 'none')) {
+      result[mk] = '';
+      return;
+    }
+    if (mk === 'c2' && (snackConfig === 'am_only' || snackConfig === 'none')) {
+      result[mk] = '';
+      return;
+    }
+
     const parts = [];
 
     // Paso 1: Revisar intercambios asignados en este tiempo

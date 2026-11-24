@@ -60,6 +60,81 @@ export default function ExchangePlanSection({ p, c, set, upd, Pill }) {
   const [catalogSearch, setCatalogSearch] = useState('');
   const [activeCatalogGroup, setActiveCatalogGroup] = useState('all');
 
+  const snackConfig = p.plan?.snackConfig || 'both';
+
+  const isMealActive = (mk) => {
+    if (mk === 'c1') return snackConfig === 'both' || snackConfig === 'am_only';
+    if (mk === 'c2') return snackConfig === 'both' || snackConfig === 'pm_only';
+    return true;
+  };
+
+  const getMealTimeMeta = (mt) => {
+    const active = isMealActive(mt.k);
+    if (!active) {
+      return { ...mt, active: false, rangeLabel: 'Inactiva (0%)', minPct: 0, maxPct: 0 };
+    }
+    if (snackConfig === 'both') {
+      return { ...mt, active: true, rangeLabel: mt.rangeLabel, minPct: mt.minPct, maxPct: mt.maxPct };
+    }
+    if (snackConfig === 'pm_only') {
+      if (mt.k === 'des') return { ...mt, active: true, rangeLabel: '30 - 35%', minPct: 30, maxPct: 35 };
+      if (mt.k === 'alm') return { ...mt, active: true, rangeLabel: '30 - 35%', minPct: 30, maxPct: 35 };
+      if (mt.k === 'c2') return { ...mt, active: true, rangeLabel: '10 - 15%', minPct: 10, maxPct: 15 };
+      if (mt.k === 'cen') return { ...mt, active: true, rangeLabel: '20 - 25%', minPct: 20, maxPct: 25 };
+    }
+    if (snackConfig === 'am_only') {
+      if (mt.k === 'des') return { ...mt, active: true, rangeLabel: '30 - 35%', minPct: 30, maxPct: 35 };
+      if (mt.k === 'c1') return { ...mt, active: true, rangeLabel: '10 - 15%', minPct: 10, maxPct: 15 };
+      if (mt.k === 'alm') return { ...mt, active: true, rangeLabel: '30 - 35%', minPct: 30, maxPct: 35 };
+      if (mt.k === 'cen') return { ...mt, active: true, rangeLabel: '20 - 25%', minPct: 20, maxPct: 25 };
+    }
+    if (snackConfig === 'none') {
+      if (mt.k === 'des') return { ...mt, active: true, rangeLabel: '30 - 35%', minPct: 30, maxPct: 35 };
+      if (mt.k === 'alm') return { ...mt, active: true, rangeLabel: '35 - 40%', minPct: 35, maxPct: 40 };
+      if (mt.k === 'cen') return { ...mt, active: true, rangeLabel: '25 - 30%', minPct: 25, maxPct: 30 };
+    }
+    return { ...mt, active: true, rangeLabel: mt.rangeLabel, minPct: mt.minPct, maxPct: mt.maxPct };
+  };
+
+  const handleSetSnackConfig = (newConfig) => {
+    upd(x => {
+      const oldEq = x.plan?.eq || {};
+      const newEq = { ...oldEq };
+      const c1Inactive = newConfig === 'pm_only' || newConfig === 'none';
+      const c2Inactive = newConfig === 'am_only' || newConfig === 'none';
+
+      EXCHANGE_GROUPS.forEach(g => {
+        const row = [...(newEq[g.k] || ['', '', '', '', ''])];
+        if (c1Inactive) row[1] = '';
+        if (c2Inactive) row[3] = '';
+        newEq[g.k] = row;
+      });
+
+      return {
+        ...x,
+        plan: {
+          ...x.plan,
+          snackConfig: newConfig,
+          eq: newEq
+        }
+      };
+    });
+  };
+
+  const handleToggleMeal = (mk) => {
+    if (mk === 'c1') {
+      if (snackConfig === 'both') handleSetSnackConfig('pm_only');
+      else if (snackConfig === 'am_only') handleSetSnackConfig('none');
+      else if (snackConfig === 'pm_only') handleSetSnackConfig('both');
+      else if (snackConfig === 'none') handleSetSnackConfig('am_only');
+    } else if (mk === 'c2') {
+      if (snackConfig === 'both') handleSetSnackConfig('am_only');
+      else if (snackConfig === 'pm_only') handleSetSnackConfig('none');
+      else if (snackConfig === 'am_only') handleSetSnackConfig('both');
+      else if (snackConfig === 'none') handleSetSnackConfig('pm_only');
+    }
+  };
+
   const handleSetCostLevel = (lvl) => {
     setCostLevel(lvl);
     set('plan.costLevel', lvl);
@@ -219,6 +294,7 @@ export default function ExchangePlanSection({ p, c, set, upd, Pill }) {
     });
 
     const mealTotals = MEAL_TIMES.map((mt, i) => {
+      const meta = getMealTimeMeta(mt);
       let inter = 0;
       let kcal = 0;
       let cho = 0;
@@ -236,9 +312,9 @@ export default function ExchangePlanSection({ p, c, set, upd, Pill }) {
       const baseKcal = vctMeta > 0 ? vctMeta : (excelCalc.totalGeneral.kcal || 1);
       const pctVct = baseKcal > 0 ? (kcal / baseKcal) * 100 : 0;
       const pctPlan = excelCalc.totalGeneral.kcal > 0 ? (kcal / excelCalc.totalGeneral.kcal) * 100 : 0;
-      const inRange = pctVct >= mt.minPct - 0.5 && pctVct <= mt.maxPct + 0.5;
+      const inRange = meta.active ? (pctVct >= meta.minPct - 0.5 && pctVct <= meta.maxPct + 0.5) : (kcal === 0);
       return {
-        ...mt,
+        ...meta,
         inter,
         kcal,
         cho,
@@ -261,22 +337,23 @@ export default function ExchangePlanSection({ p, c, set, upd, Pill }) {
       totalDistributedInt,
       totalDistributedKcal
     };
-  }, [p.plan.eq, excelCalc, vctMeta]);
+  }, [p.plan.eq, excelCalc, vctMeta, snackConfig]);
 
   const rissData = p.plan?.riss || {};
   const riissAdaptationNotes = useMemo(() => {
     return getRiissAdaptationNotes(rissData);
   }, [rissData]);
 
-  // Sugerencias automáticas de menú típico salvadoreño en 5 tiempos según intercambios, nivel de costo y reglas RIISS
+  // Sugerencias automáticas de menú típico salvadoreño según intercambios, nivel de costo y reglas RIISS
   const suggestedMenus = useMemo(() => {
     return generateSalvadoranMenu({
       eqMap: p.plan.eq || {},
       costLevel,
       rissData,
-      variantIndex: variantIdx
+      variantIndex: variantIdx,
+      snackConfig
     });
-  }, [p.plan.eq, costLevel, rissData, variantIdx]);
+  }, [p.plan.eq, costLevel, rissData, variantIdx, snackConfig]);
 
   // Acción 1: Calcular intercambios automáticamente para cuadrar metas (95-105%)
   const handleAutoCalculateExchanges = () => {
@@ -336,9 +413,9 @@ export default function ExchangePlanSection({ p, c, set, upd, Pill }) {
     });
   };
 
-  // Construye distribución en los 5 tiempos de comida respetando rangos %
-  const buildMealDistributionFromTotals = (totalsMap) => {
-    // Pesos por tiempo: [Desayuno (32%), Merienda AM (8%), Almuerzo (28%), Merienda PM (8%), Cena (24%)]
+  // Construye distribución en los tiempos de comida activos respetando rangos %
+  const buildMealDistributionFromTotals = (totalsMap, config = snackConfig) => {
+    // Pesos base por tiempo: [Desayuno (32%), Merienda AM (8%), Almuerzo (28%), Merienda PM (8%), Cena (24%)]
     const W = {
       incaparina: [0.5, 0.25, 0, 0, 0.25],
       leche_dc: [0.45, 0.15, 0, 0.15, 0.25],
@@ -360,7 +437,28 @@ export default function ExchangePlanSection({ p, c, set, upd, Pill }) {
       const tot = num(totalsMap[g.k]) || 0;
       if (tot > 0) {
         const hasHalf = (tot % 1) !== 0;
-        const dist = splitExchanges(tot, W[g.k] || [0.3, 0.1, 0.3, 0.1, 0.2], hasHalf);
+        let baseW = [...(W[g.k] || [0.3, 0.1, 0.3, 0.1, 0.2])];
+        if (config === 'pm_only') {
+          const c1W = baseW[1];
+          baseW[1] = 0;
+          baseW[0] += c1W * 0.4;
+          baseW[2] += c1W * 0.4;
+          baseW[3] += c1W * 0.2;
+        } else if (config === 'am_only') {
+          const c2W = baseW[3];
+          baseW[3] = 0;
+          baseW[2] += c2W * 0.4;
+          baseW[4] += c2W * 0.4;
+          baseW[1] += c2W * 0.2;
+        } else if (config === 'none') {
+          const snW = baseW[1] + baseW[3];
+          baseW[1] = 0;
+          baseW[3] = 0;
+          baseW[0] += snW * 0.35;
+          baseW[2] += snW * 0.35;
+          baseW[4] += snW * 0.30;
+        }
+        const dist = splitExchanges(tot, baseW, hasHalf);
         newEq[g.k] = dist.map(v => v > 0 ? String(v) : '');
       } else {
         newEq[g.k] = ['', '', '', '', ''];
@@ -775,7 +873,7 @@ export default function ExchangePlanSection({ p, c, set, upd, Pill }) {
               <h2 className="h2 mb-0">2. Distribución por Tiempos de Comida y Calorías</h2>
             </div>
             <p className="hint mt-1">
-              Distribuya los intercambios en los 5 tiempos de comida verificando que la columna <strong>Por distribuir</strong> quede en 0 y el <strong>% de distribución</strong> cumpla la meta de cada tiempo.
+              Distribuya los intercambios en los tiempos de comida activos verificando que la columna <strong>Por distribuir</strong> quede en 0 y el <strong>% de distribución</strong> cumpla la meta. Puede eliminar una merienda o ajustar el esquema según los hábitos del paciente.
             </p>
           </div>
           <button
@@ -784,8 +882,41 @@ export default function ExchangePlanSection({ p, c, set, upd, Pill }) {
             disabled={excelCalc.totalGeneral.nInt === 0}
             style={{ opacity: excelCalc.totalGeneral.nInt > 0 ? 1 : 0.5 }}
           >
-            <ArrowRight className="w-4 h-4" /> Auto-distribuir intercambios en los 5 tiempos
+            <ArrowRight className="w-4 h-4" /> Auto-distribuir en tiempos activos
           </button>
+        </div>
+
+        {/* Selector de esquema de tiempos y meriendas */}
+        <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-sunken rounded-lg border border-line mb-3">
+          <div className="flex items-center gap-2">
+            <Clock className="w-4 h-4 text-brand" />
+            <div>
+              <span className="text-xs font-bold text-ink">Esquema de Tiempos de Comida:</span>
+              <div className="text-[11px] text-muted">
+                {snackConfig === 'both' ? '5 tiempos (Desayuno, Merienda AM, Almuerzo, Merienda PM y Cena)' :
+                 snackConfig === 'pm_only' ? '4 tiempos (Desayuno, Almuerzo, Merienda PM y Cena — Sin Merienda AM)' :
+                 snackConfig === 'am_only' ? '4 tiempos (Desayuno, Merienda AM, Almuerzo y Cena — Sin Merienda PM)' :
+                 '3 tiempos (Solo comidas principales: Desayuno, Almuerzo y Cena)'}
+              </div>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {[
+              ['both', '5 tiempos (2 meriendas)'],
+              ['pm_only', '4 tiempos (Solo Merienda PM)'],
+              ['am_only', '4 tiempos (Solo Merienda AM)'],
+              ['none', '3 tiempos (Sin meriendas)']
+            ].map(([k, lbl]) => (
+              <button
+                key={k}
+                type="button"
+                className={`btn btn-xs ${snackConfig === k ? 'btn-primary font-bold shadow-xs' : 'border-line text-muted bg-surface'}`}
+                onClick={() => handleSetSnackConfig(k)}
+              >
+                {lbl}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="table-responsive">
@@ -796,20 +927,50 @@ export default function ExchangePlanSection({ p, c, set, upd, Pill }) {
                 <th className="r" rowSpan={2} title="Intercambios de la Tabla 1 pendientes de asignar a un tiempo de comida">
                   Por distribuir
                 </th>
-                {MEAL_TIMES.map(mt => (
-                  <th key={mt.k} colSpan={2} style={{ textAlign: 'center', borderLeft: '1px solid var(--line)' }}>
-                    <div>{mt.n}</div>
-                    <div className="text-[10px] font-normal text-muted">Meta: {mt.rangeLabel}</div>
-                  </th>
-                ))}
+                {MEAL_TIMES.map(mt => {
+                  const meta = getMealTimeMeta(mt);
+                  const isSnack = mt.k === 'c1' || mt.k === 'c2';
+                  return (
+                    <th
+                      key={mt.k}
+                      colSpan={2}
+                      style={{
+                        textAlign: 'center',
+                        borderLeft: '1px solid var(--line)',
+                        opacity: meta.active ? 1 : 0.6,
+                        background: meta.active ? 'transparent' : 'var(--sunken)'
+                      }}
+                    >
+                      <div className="font-bold">{mt.n}</div>
+                      <div className="text-[10px] font-normal text-muted">Meta: {meta.rangeLabel}</div>
+                      {isSnack && (
+                        <button
+                          type="button"
+                          className={`text-[10px] inline-block mt-1 px-1.5 py-0.5 rounded border transition-colors ${
+                            meta.active
+                              ? 'text-danger border-danger/30 hover:bg-danger/10'
+                              : 'text-brand border-brand/30 hover:bg-brand/10 bg-brand-soft/40 font-semibold'
+                          }`}
+                          onClick={() => handleToggleMeal(mt.k)}
+                          title={meta.active ? 'Eliminar esta merienda para este paciente' : 'Activar esta merienda'}
+                        >
+                          {meta.active ? '✕ Eliminar merienda' : '+ Activar merienda'}
+                        </button>
+                      )}
+                    </th>
+                  );
+                })}
               </tr>
               <tr className="bg-sunken">
-                {MEAL_TIMES.map(mt => (
-                  <React.Fragment key={mt.k}>
-                    <th style={{ textAlign: 'center', borderLeft: '1px solid var(--line)' }}>Inter</th>
-                    <th className="r">Kcal</th>
-                  </React.Fragment>
-                ))}
+                {MEAL_TIMES.map(mt => {
+                  const active = isMealActive(mt.k);
+                  return (
+                    <React.Fragment key={mt.k}>
+                      <th style={{ textAlign: 'center', borderLeft: '1px solid var(--line)', opacity: active ? 1 : 0.6 }}>Inter</th>
+                      <th className="r" style={{ opacity: active ? 1 : 0.6 }}>Kcal</th>
+                    </React.Fragment>
+                  );
+                })}
               </tr>
             </thead>
             <tbody>
@@ -833,26 +994,41 @@ export default function ExchangePlanSection({ p, c, set, upd, Pill }) {
                       )}
                     </td>
                     {MEAL_TIMES.map((mt, mIdx) => {
+                      const active = isMealActive(mt.k);
                       const valStr = ((p.plan.eq && p.plan.eq[r.g.k]) || [])[mIdx] ?? '';
                       const kcalVal = r.mealKcals[mIdx];
                       return (
                         <React.Fragment key={mt.k}>
-                          <td style={{ textAlign: 'center', borderLeft: '1px solid var(--line)' }}>
+                          <td
+                            style={{
+                              textAlign: 'center',
+                              borderLeft: '1px solid var(--line)',
+                              opacity: active ? 1 : 0.45,
+                              background: active ? 'transparent' : 'var(--sunken)'
+                            }}
+                          >
                             <input
                               type="number"
                               min="0"
                               step="0.5"
                               className="inp inp-sm"
                               inputMode="decimal"
-                              placeholder="0"
-                              value={valStr}
+                              placeholder={active ? "0" : "—"}
+                              disabled={!active}
+                              value={active ? valStr : ''}
                               onKeyDown={preventInvalidNumKeys}
                               onChange={e => set(`plan.eq.${r.g.k}.${mIdx}`, sanitizePositiveDecimal(e.target.value))}
                               aria-label={`${r.g.n} en ${mt.n}`}
                             />
                           </td>
-                          <td className="r num text-muted">
-                            {kcalVal > 0 ? f0(kcalVal) : '0'}
+                          <td
+                            className="r num text-muted"
+                            style={{
+                              opacity: active ? 1 : 0.45,
+                              background: active ? 'transparent' : 'var(--sunken)'
+                            }}
+                          >
+                            {active && kcalVal > 0 ? f0(kcalVal) : '0'}
                           </td>
                         </React.Fragment>
                       );
@@ -869,10 +1045,10 @@ export default function ExchangePlanSection({ p, c, set, upd, Pill }) {
                 </td>
                 {distCalc.mealTotals.map(mt => (
                   <React.Fragment key={mt.k}>
-                    <td style={{ textAlign: 'center', borderLeft: '1px solid var(--line)' }} className="num font-bold">
+                    <td style={{ textAlign: 'center', borderLeft: '1px solid var(--line)', opacity: mt.active ? 1 : 0.5 }} className="num font-bold">
                       {f1(mt.inter)}
                     </td>
-                    <td className="r num font-bold text-brand">
+                    <td className="r num font-bold text-brand" style={{ opacity: mt.active ? 1 : 0.5 }}>
                       {f0(mt.kcal)} kcal
                     </td>
                   </React.Fragment>
@@ -881,11 +1057,14 @@ export default function ExchangePlanSection({ p, c, set, upd, Pill }) {
               <tr>
                 <td className="stick text-xs text-muted" style={{ background: 'var(--sunken)' }}>Rango recomendado</td>
                 <td className="r text-xs text-muted">100%</td>
-                {MEAL_TIMES.map(mt => (
-                  <td key={mt.k} colSpan={2} style={{ textAlign: 'center', borderLeft: '1px solid var(--line)' }} className="text-xs text-muted num">
-                    {mt.rangeLabel}
-                  </td>
-                ))}
+                {MEAL_TIMES.map(mt => {
+                  const meta = getMealTimeMeta(mt);
+                  return (
+                    <td key={mt.k} colSpan={2} style={{ textAlign: 'center', borderLeft: '1px solid var(--line)', opacity: meta.active ? 1 : 0.5 }} className="text-xs text-muted num">
+                      {meta.rangeLabel}
+                    </td>
+                  );
+                })}
               </tr>
               <tr>
                 <td className="stick text-xs font-semibold" style={{ background: 'var(--sunken)' }}>% de distribución real</td>
@@ -893,13 +1072,17 @@ export default function ExchangePlanSection({ p, c, set, upd, Pill }) {
                   {f0(distCalc.totalDistributedKcal)} kcal
                 </td>
                 {distCalc.mealTotals.map(mt => (
-                  <td key={mt.k} colSpan={2} style={{ textAlign: 'center', borderLeft: '1px solid var(--line)' }}>
-                    {mt.kcal > 0 ? (
-                      <span className={`pill ${mt.inRange ? 'ok' : 'warn'}`}>
-                        {mt.inRange ? '✓ ' : ''}{f1(mt.pctVct)}%
-                      </span>
+                  <td key={mt.k} colSpan={2} style={{ textAlign: 'center', borderLeft: '1px solid var(--line)', opacity: mt.active ? 1 : 0.5 }}>
+                    {mt.active ? (
+                      mt.kcal > 0 ? (
+                        <span className={`pill ${mt.inRange ? 'ok' : 'warn'}`}>
+                          {mt.inRange ? '✓ ' : ''}{f1(mt.pctVct)}%
+                        </span>
+                      ) : (
+                        <span className="text-xs text-muted">0.0%</span>
+                      )
                     ) : (
-                      <span className="text-xs text-muted">0.0%</span>
+                      <span className="text-xs text-muted italic">Inactiva</span>
                     )}
                   </td>
                 ))}
@@ -915,7 +1098,7 @@ export default function ExchangePlanSection({ p, c, set, upd, Pill }) {
           <div>
             <div className="flex items-center gap-2">
               <Utensils className="w-5 h-5 text-brand" />
-              <h2 className="h2 mb-0">3. Menú en 5 Tiempos: Platos Típicos Salvadoreños Adaptados (RIISS 2014)</h2>
+              <h2 className="h2 mb-0">3. Menú {snackConfig === 'both' ? 'en 5 Tiempos' : snackConfig === 'none' ? 'en 3 Tiempos' : 'en 4 Tiempos'}: Platos Típicos Salvadoreños Adaptados (RIISS 2014)</h2>
             </div>
             <p className="hint mt-1">
               Platos salvadoreños tradicionales (desayuno con frijoles de la olla, tortillas de comal, plátano salcochado, pupusas saludables, pollo entomatado, guisados con güisquil/pipián) adaptados estrictamente a la dieta hospitalaria RIISS y al número exacto de intercambios por tiempo.
@@ -1012,9 +1195,9 @@ export default function ExchangePlanSection({ p, c, set, upd, Pill }) {
           </button>
         </div>
 
-        {/* Tarjetas de sugerencia en vivo + edición para los 5 tiempos */}
+        {/* Tarjetas de sugerencia en vivo + edición para los tiempos activos */}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {distCalc.mealTotals.map((mt) => {
+          {distCalc.mealTotals.filter(mt => isMealActive(mt.k)).map((mt) => {
             const sugText = suggestedMenus[mt.k];
             const currentMenu = (p.plan.menu && p.plan.menu[mt.k]) || '';
             const mealMeds = (Array.isArray(p.gen?.medList) ? p.gen.medList : []).filter(

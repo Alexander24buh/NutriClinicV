@@ -159,6 +159,7 @@ export function generateClinicalNoteData(p, c) {
     `Talla: ${tallaM} mt`,
     `IMC: ${c.imc != null ? f2(c.imc) + ' kg/m²' : '—'}`
   ];
+  if (a.pesoSeco) antroLines.push(`Peso seco estimado: ${a.pesoSeco} kg${c.imcSeco != null ? ' (IMC peso seco: ' + f2(c.imcSeco) + ' kg/m²)' : ''}`);
   if (a.habitual) antroLines.push(`Peso habitual: ${a.habitual} kg${c.cambio != null ? ' (cambio: ' + fs(-c.cambio) + ' %)' : ''}`);
   if (c.pi != null) antroLines.push(`Peso ideal (Hamwi): ${f1(c.pi)} kg`);
   if (c.pAj != null && c.pAj !== num(a.peso)) antroLines.push(`Peso ajustado: ${f1(c.pAj)} kg`);
@@ -200,8 +201,16 @@ export function generateClinicalNoteData(p, c) {
   const reqProt = c.macros?.p?.g != null ? f0(c.macros.p.g) : (r.gkg?.p && a.peso ? f0(num(r.gkg.p) * num(a.peso)) : '—');
   const reqLiq = c.liquidos != null ? f0(c.liquidos) : '—';
 
+  let calDetalle = `Calóricos: ${reqKcal} kcal/día`;
+  if (c.kcalkg != null) calDetalle += ` (${f1(c.kcalkg)} kcal/kg/día)`;
+  if (c.geb != null) {
+    calDetalle += ` [GEB: ${f0(c.geb)} kcal`;
+    if (c.etaKcal) calDetalle += `, ETA: +${f0(c.etaKcal)} kcal (${c.etaPct ?? 10}%)`;
+    calDetalle += ']';
+  }
+
   const reqLines = [
-    `Calóricos: ${reqKcal} kcal/día${c.kcalkg != null ? ' (' + f1(c.kcalkg) + ' kcal/kg/día)' : ''}`,
+    calDetalle,
     `Proteicos: ${reqProt} g/día${c.macros?.p?.gkg != null ? ' (' + f1(c.macros.p.gkg) + ' g/kg/día, ' + f1(c.macros.p.pct) + '% VCT)' : ''}`
   ];
   if (c.macros) {
@@ -235,7 +244,17 @@ export function generateClinicalNoteData(p, c) {
   if (rissSec.length > 0) {
     prescripcionTexto += ` (${rissSec.join(', ')})`;
   }
-  prescripcionTexto += ' con fraccionamiento en 5 tiempos de comida según lineamientos hospitalarios RIISS.';
+
+  const sCfg = pl.snackConfig || 'both';
+  if (sCfg === 'none') {
+    prescripcionTexto += ' con fraccionamiento en 3 tiempos de comida principales según lineamientos hospitalarios RIISS.';
+  } else if (sCfg === 'pm_only') {
+    prescripcionTexto += ' con fraccionamiento en 4 tiempos de comida (Desayuno, Almuerzo, Merienda PM y Cena) según lineamientos hospitalarios RIISS.';
+  } else if (sCfg === 'am_only') {
+    prescripcionTexto += ' con fraccionamiento en 4 tiempos de comida (Desayuno, Merienda AM, Almuerzo y Cena) según lineamientos hospitalarios RIISS.';
+  } else {
+    prescripcionTexto += ' con fraccionamiento en 5 tiempos de comida según lineamientos hospitalarios RIISS.';
+  }
 
   // H. Educación alimentaria y nutricional (Párrafos clínicos naturales como en el ejemplo)
   const eduParagraphs = [];

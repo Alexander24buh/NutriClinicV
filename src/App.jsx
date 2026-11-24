@@ -217,15 +217,31 @@ function calc(p) {
   const h = talla > 0 ? talla / 100 : null;
   o.imc = peso > 0 && h ? peso / (h * h) : null;
 
-  // Detección de condición fisiológica: Gestación o Pediatría
+  // Detección de condición fisiológica: Gestación, Pediatría o Adulto
   const semGest = num(g.semGestacional);
   const pesoPregest = num(g.pesoPregestacional);
-  const isEmbarazada = sexo === 'F' && (g.embarazada === true || g.embarazada === 'true' || semGest != null);
   const edadMeses = num(g.edadMeses);
-  const isPediatrico = !isEmbarazada && ((edad != null && edad < 19) || edadMeses != null);
 
+  // Determinación del modelo: explícito si fue elegido por el usuario, o automático según edad/gestación
+  let modelo = g.modeloEvaluacion || 'auto';
+  if (modelo === 'auto') {
+    if (sexo === 'F' && (g.embarazada === true || g.embarazada === 'true')) {
+      modelo = 'embarazada';
+    } else if ((edad != null && edad < 19) || (edadMeses != null && edadMeses > 0 && (edad == null || edad < 19))) {
+      modelo = 'pediatrico';
+    } else {
+      modelo = 'adulto';
+    }
+  }
+
+  const isEmbarazada = modelo === 'embarazada' && sexo === 'F';
+  const isPediatrico = modelo === 'pediatrico';
+  const isAdulto = modelo === 'adulto';
+
+  o.modeloEvaluacion = modelo;
   o.isEmbarazada = isEmbarazada;
   o.isPediatrico = isPediatrico;
+  o.isAdulto = isAdulto;
   o.semGestacional = semGest;
   o.pesoPregestacional = pesoPregest;
   o.edadMeses = edadMeses;
@@ -313,8 +329,13 @@ function calc(p) {
   o.mg = o.gc != null && peso ? peso * o.gc / 100 : null;
   o.mlg = o.mg != null ? peso - o.mg : null;
 
+  // Peso seco para pacientes con retención de líquidos / edema / ascitis / diálisis
+  const pesoSeco = num(a.pesoSeco);
+  o.pesoSeco = pesoSeco;
+  o.imcSeco = pesoSeco > 0 && h ? pesoSeco / (h * h) : null;
+
   // peso de cálculo
-  o.wCalc = r.pesoBase === 'ideal' ? o.pi : r.pesoBase === 'ajustado' ? o.pAj : peso;
+  o.wCalc = r.pesoBase === 'seco' ? (pesoSeco || peso) : r.pesoBase === 'ideal' ? o.pi : r.pesoBase === 'ajustado' ? o.pAj : peso;
 
   // bioquímica básica
   o.bio = BIO.map(b => {
@@ -398,7 +419,13 @@ function calc(p) {
   o.geb = geb;
   o.af = num(r.actVal) ?? 1;
   o.fe = num(r.estVal) ?? 1;
-  o.get = geb == null ? null : o.kgMode ? geb : geb * o.af * o.fe;
+
+  // Factor Térmico de los Alimentos (ETA / TEF)
+  const etaPct = r.etaPct !== undefined && r.etaPct !== '' ? (num(r.etaPct) ?? 10) : 10;
+  o.etaPct = etaPct;
+  o.etaKcal = geb == null ? 0 : Math.round(geb * (etaPct / 100));
+
+  o.get = geb == null ? null : o.kgMode ? geb : Math.round(geb * o.af * o.fe + o.etaKcal);
   o.ajuste = num(r.ajuste) || 0;
   o.vct = o.get == null ? null : o.get + o.ajuste;
   o.kcalkg = o.vct && W ? o.vct / W : null;
@@ -615,14 +642,14 @@ function suggestPlan(o) {
 const blankPatient = () => ({
   id: uid(),
   ejemplo: false,
-  gen: { nombre: '', edad: '', edadMeses: '', sexo: '', fecha: today(), expediente: '', dx: '', motivo: '', servicio: '', cama: '', deih: '', diaEvolucion: '', responsable: '', orientacion: '', obstetricos: '', meds: '', medList: [], antecedentes: '', embarazada: false, semGestacional: '', pesoPregestacional: '' },
-  antro: { peso: '', talla: '', habitual: '', periodo: '3m', cintura: '', cadera: '', cb: '', pct: '', pbi: '', psub: '', psup: '', pc: '', longitudTipo: 'de_pie' },
+  gen: { nombre: '', edad: '', edadMeses: '', sexo: '', fecha: today(), expediente: '', dx: '', motivo: '', servicio: '', cama: '', deih: '', diaEvolucion: '', responsable: '', orientacion: '', obstetricos: '', modeloEvaluacion: 'auto', meds: '', medList: [], antecedentes: '', embarazada: false, semGestacional: '', pesoPregestacional: '' },
+  antro: { peso: '', pesoSeco: '', talla: '', habitual: '', periodo: '3m', cintura: '', cadera: '', cb: '', pct: '', pbi: '', psub: '', psup: '', pc: '', longitudTipo: 'de_pie' },
   bio: { glucosa: '', hba1c: '', creatinina: '', bun: '', urea: '', albumina: '', fosforo: '', calcio: '', magnesio: '', pcr: '', colesterol: '', ldl: '', hdl: '', tg: '', potasio: '', sodio: '', hemoglobina: '' },
   clin: { sint: {}, pat: {}, musculo: 'normal', grasa: 'normal', edema: 'no', ascitis: 'no', fuerza: '', hidratacion: '', piel: '', oral: '', otros: '' },
   dieta: { rec: {}, ingesta: '', kcalEst: '', protEst: '', agua: '', alcohol: '', tabaco: '', suplementos: '', alergias: '', apetito: '', actividad: '', frec: {}, notas: '' },
-  req: { formula: 'mifflin', pesoBase: 'real', kcalkg: '30', actKey: 'sed', actVal: '1.2', estKey: 'none', estVal: '1', ajuste: '0', modo: 'pct', pct: { p: '15', c: '55', l: '30' }, gkg: { p: '1', c: '4', l: '1' }, liq: '30' },
+  req: { formula: 'mifflin', pesoBase: 'real', kcalkg: '30', actKey: 'sed', actVal: '1.2', estKey: 'none', estVal: '1', etaPct: '10', ajuste: '0', modo: 'pct', pct: { p: '15', c: '55', l: '30' }, gkg: { p: '1', c: '4', l: '1' }, liq: '30' },
   pes: { items: [] },
-  plan: { totals: {}, eq: {}, vals: {}, menu: {}, objetivos: '', recs: '', indicadores: '', proxima: '', seg: [], costLevel: 'regular', riss: { primaryDiet: 'normal', secondaryDiets: [], justificacion: '' } },
+  plan: { totals: {}, eq: {}, vals: {}, menu: {}, objetivos: '', recs: '', indicadores: '', proxima: '', seg: [], costLevel: 'regular', snackConfig: 'both', riss: { primaryDiet: 'normal', secondaryDiets: [], justificacion: '' } },
 });
 
 function seedPatients() {
@@ -785,7 +812,7 @@ function reportText(p, o) {
   L.push(`Motivo de consulta: ${g.motivo || '—'}`);
   L.push('');
   L.push('A. ANTROPOMETRÍA');
-  L.push(`Peso ${p.antro.peso || '—'} kg | Talla ${p.antro.talla || '—'} cm | Peso habitual ${p.antro.habitual || '—'} kg`);
+  L.push(`Peso ${p.antro.peso || '—'} kg${p.antro.pesoSeco ? ' | Peso seco: ' + p.antro.pesoSeco + ' kg' : ''} | Talla ${p.antro.talla || '—'} cm | Peso habitual ${p.antro.habitual || '—'} kg`);
   L.push(`IMC ${f1(o.imc)} kg/m²${o.imcCl ? ' (' + o.imcCl.label + ')' : ''}`);
   if (o.cambio != null) L.push(`Cambio de peso: ${fs(-o.cambio)} % en ${o.per.l.toLowerCase()}${o.cambioCl ? ' (' + o.cambioCl.label + ')' : ''}`);
   if (o.pi) L.push(`Peso ideal (Hamwi) ${f1(o.pi)} kg (${f0(o.pctPI)} % del ideal)`);
@@ -822,7 +849,7 @@ function reportText(p, o) {
   const F = FORMULAS.find(x => x.k === p.req.formula);
   L.push(`Fórmula: ${F.n}${o.kgMode ? ' (' + p.req.kcalkg + ' kcal/kg)' : ''} | Peso de cálculo: ${f1(o.wCalc)} kg`);
   if (o.geb != null) {
-    L.push(`GEB ${f0(o.geb)} kcal${o.kgMode ? '' : ` × AF ${o.af} × FE ${o.fe} = GET ${f0(o.get)} kcal`} | Ajuste ${o.ajuste > 0 ? '+' : ''}${f0(o.ajuste)} kcal | VCT ${f0(o.vct)} kcal`);
+    L.push(`GEB ${f0(o.geb)} kcal${o.kgMode ? '' : ` × AF ${o.af} × FE ${o.fe} + ETA ${f0(o.etaKcal)} kcal (${o.etaPct ?? 10}%) = GET ${f0(o.get)} kcal`} | Ajuste ${o.ajuste > 0 ? '+' : ''}${f0(o.ajuste)} kcal | VCT ${f0(o.vct)} kcal`);
   }
   if (o.macros) {
     const m = o.macros;
@@ -1347,8 +1374,11 @@ function SubA() {
         <div className="grid gap-4 content-start">
           <section className="card p-5">
             <h3 className="h3">Peso y talla</h3>
-            <div className="grid gap-4 sm:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <Field label="Peso actual"><In path="antro.peso" num unit="kg" /></Field>
+              <Field label="Peso seco estimado" hint="Edema / ascitis / diálisis">
+                <In path="antro.pesoSeco" num unit="kg" placeholder="Opcional" />
+              </Field>
               <Field label={c.isPediatrico && (num(p.gen.edadMeses) || 0) < 24 ? "Longitud / Talla" : "Talla"}>
                 <In path="antro.talla" num unit="cm" />
               </Field>
@@ -1406,6 +1436,9 @@ function SubA() {
           {!c.imcCl && <p className="hint">Ingrese peso y talla para calcular.</p>}
         </section>
         <section className="card px-5 py-2">
+          {c.pesoSeco != null && (
+            <Metric label="Peso seco estimado" value={f1(c.pesoSeco)} unit="kg" note={c.imcSeco != null ? `IMC peso seco: ${f1(c.imcSeco)} kg/m²` : 'Para pacientes con edema o ascitis'} />
+          )}
           <Metric label="Cambio de peso" value={c.cambio == null ? '—' : fs(-c.cambio)} unit="%" flag={c.cambioCl} note={c.cambio == null ? 'Requiere peso actual y habitual' : 'Respecto al peso habitual'} />
           <Metric label="Peso ideal (Hamwi)" value={f1(c.pi)} unit="kg" note={c.pctPI != null ? f0(c.pctPI) + ' % del peso ideal' : 'Requiere talla y sexo'} />
           <Metric label="Rango de peso saludable" value={c.rango ? f1(c.rango[0]) + ' – ' + f1(c.rango[1]) : '—'} unit="kg" note="IMC de 18.5 a 24.9" />
@@ -1807,7 +1840,15 @@ function TabReq() {
               <Sel path="req.formula" options={FORMULAS.map(x => [x.k, x.n])} onChange={onFormula} />
             </Field>
             <Field label="Peso de cálculo" hint={c.wCalc != null ? `Se usan ${f1(c.wCalc)} kg` : 'Requiere los datos de antropometría'}>
-              <Sel path="req.pesoBase" options={[['real', 'Peso real'], ['ideal', 'Peso ideal (Hamwi)'], ['ajustado', 'Peso ajustado']]} />
+              <Sel
+                path="req.pesoBase"
+                options={[
+                  ['real', 'Peso real'],
+                  ['seco', `Peso seco (${c.pesoSeco != null ? f1(c.pesoSeco) + ' kg' : 'sin dato'})`],
+                  ['ideal', 'Peso ideal (Hamwi)'],
+                  ['ajustado', 'Peso ajustado']
+                ]}
+              />
             </Field>
             {F.kg && (
               <Field label="Energía por kilo">
@@ -1827,6 +1868,30 @@ function TabReq() {
                     <Sel path="req.estKey" options={EST.map(x => [x[0], x[1]])} onChange={onEst} />
                   </Field>
                   <div className="max-w-[9rem]"><In path="req.estVal" num unit="×" /></div>
+                </div>
+                <div className="grid gap-2 sm:col-span-2">
+                  <Field label="Factor Térmico de los Alimentos (ETA)" hint={`Aporte calórico estimado: +${f0(c.etaKcal)} kcal/día (${c.etaPct ?? 10}%)`}>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <select
+                        className="inp flex-1 min-w-[12rem]"
+                        value={['0', '6', '8', '10'].includes(String(r.etaPct ?? '10')) ? String(r.etaPct ?? '10') : 'custom'}
+                        onChange={e => {
+                          if (e.target.value !== 'custom') {
+                            set('req.etaPct', e.target.value);
+                          }
+                        }}
+                      >
+                        <option value="10">10% — Dieta mixta estándar (Recomendado)</option>
+                        <option value="8">8% — Dieta mixta moderada</option>
+                        <option value="6">6% — Dieta hipoproteica</option>
+                        <option value="0">0% — Sin ETA adicional</option>
+                        <option value="custom">Personalizado (%)</option>
+                      </select>
+                      <div className="w-24 shrink-0">
+                        <In path="req.etaPct" num unit="%" placeholder="10" />
+                      </div>
+                    </div>
+                  </Field>
                 </div>
               </>
             )}
@@ -1924,6 +1989,10 @@ function TabReq() {
                 <div className="flex justify-between py-1.5 border-b border-line">
                   <span className="text-muted">× Factor de estrés</span>
                   <span className="num">{c.fe}</span>
+                </div>
+                <div className="flex justify-between py-1.5 border-b border-line">
+                  <span className="text-muted">+ Factor térmico (ETA)</span>
+                  <span className="num">+{f0(c.etaKcal)} kcal ({c.etaPct ?? 10}%)</span>
                 </div>
                 <div className="flex justify-between py-1.5 border-b border-line">
                   <span>= Gasto energético total</span>

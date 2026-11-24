@@ -200,7 +200,7 @@ export function exportClinicalReportPDF({ p, c, SINT, PATOL, RECALL, FORMULAS, p
     head: [['Indicador', 'Valor', 'Indicador', 'Valor']],
     headStyles: { fillColor: brandColor, textColor: [255, 255, 255], fontStyle: 'bold' },
     body: [
-      ['Peso actual / Talla', `${p.antro.peso || '—'} kg / ${p.antro.talla || '—'} cm`, 'Peso habitual', `${p.antro.habitual || '—'} kg`],
+      ['Peso actual / Talla', `${p.antro.peso || '—'} kg / ${p.antro.talla || '—'} cm`, p.antro.pesoSeco ? 'Peso seco estimado' : 'Peso habitual', p.antro.pesoSeco ? `${p.antro.pesoSeco} kg` : `${p.antro.habitual || '—'} kg`],
       ['IMC', cleanStr(imcText), 'Cambio de peso', cleanStr(cambioText)],
       ['Peso ideal (Hamwi)', cleanStr(piText), 'Peso ajustado', c.pAj ? `${f1(c.pAj)} kg` : '—'],
       ['Circunf. Cintura', cleanStr(cintText), 'Índice Cintura/Cadera', c.icc != null ? `${f2(c.icc)} ${c.iccCl ? '(' + c.iccCl.label + ')' : ''}` : '—'],
@@ -397,9 +397,9 @@ export function exportClinicalReportPDF({ p, c, SINT, PATOL, RECALL, FORMULAS, p
     body: [
       [
         { content: 'Fórmula:', styles: { fontStyle: 'bold' } },
-        cleanStr(F.n),
+        cleanStr(F.n + (c.kgMode ? '' : ` (GEB: ${f0(c.geb)} kcal, ETA: +${f0(c.etaKcal)} kcal)`)),
         { content: 'Peso de cálculo:', styles: { fontStyle: 'bold' } },
-        c.wCalc != null ? `${f1(c.wCalc)} kg` : '—',
+        c.wCalc != null ? `${f1(c.wCalc)} kg${p.req.pesoBase === 'seco' ? ' (Seco)' : ''}` : '—',
         { content: 'VCT Prescrito:', styles: { fontStyle: 'bold' } },
         { content: `${f0(c.vct)} kcal/día`, styles: { fontStyle: 'bold', textColor: brandColor } }
       ]
