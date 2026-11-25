@@ -406,8 +406,8 @@ function calc(p) {
     o.caCorregidoFlag = o.caCorregido < 8.5 ? lv('warn', 'Hipocalcemia corregida', '↓') : o.caCorregido > 10.2 ? lv('warn', 'Hipercalcemia corregida', '↑') : lv('ok', 'Normal', '✓');
   }
 
-  // Siempre calcular la referencia normativa RIISS 2014 (para uso directo o comparativo)
-  const riissRes = calculateRiissEnergyAndMacros(p, o);
+  // Siempre calcular la referencia normativa RIISS 2014 / INCAP 2012 (para uso directo o comparativo)
+  const riissRes = calculateRiissEnergyAndMacros(p, o, { baseMode: r.rissBaseMode });
   o.riissCalc = riissRes;
 
   // Gasto energético
@@ -1863,13 +1863,13 @@ function TabReq() {
           </div>
         )}
 
-        {/* Banner Informativo cuando se utiliza la Norma RIISS 2014 */}
+        {/* Banner y Panel de Control cuando se utiliza la Norma RIISS 2014 */}
         {r.formula === 'riss' && c.riissCalc && (
-          <div className="card p-4 border-2 border-brand bg-brand-soft/20 rounded-xl">
-            <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
+          <div className="card p-4 border-2 border-brand bg-brand-soft/20 rounded-xl space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <span className="badge bg-brand text-white font-bold text-xs px-2.5 py-1 rounded">
-                  RIISS · MINSAL 2014
+                  RIISS · MINSAL 2014 / INCAP 2012
                 </span>
                 <span className="font-semibold text-sm text-text-primary">
                   {c.riissCalc.dietaNombre}
@@ -1891,34 +1891,122 @@ function TabReq() {
                   }
                 }}
               >
-                ⚡ Sincronizar macros RIISS
+                ⚡ Sincronizar macros al plan ({c.riissCalc.macros.p.pct}% P / {c.riissCalc.macros.c.pct}% CHO / {c.riissCalc.macros.l.pct}% L)
               </button>
             </div>
-            <p className="text-xs text-text-muted mb-2">
-              Referencia: <strong>{c.riissCalc.tablaOrigen}</strong> · Grupo: <strong>{c.riissCalc.grupoLabel}</strong>
-            </p>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
-              <div className="p-2 rounded bg-surface border border-line">
-                <div className="text-text-muted text-2xs">Energía Total</div>
-                <div className="font-bold text-sm text-brand">{f0(c.riissCalc.vct)} kcal</div>
-                <div className="text-2xs text-text-muted">{c.riissCalc.kcalKg} kcal/kg</div>
+
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-text-muted">
+              <div>
+                Referencia: <strong className="text-text-primary">{c.riissCalc.tablaOrigen}</strong> · Grupo: <strong className="text-text-primary">{c.riissCalc.grupoLabel}</strong>
               </div>
-              <div className="p-2 rounded bg-surface border border-line">
-                <div className="text-text-muted text-2xs">Proteínas</div>
-                <div className="font-bold text-sm text-text-primary">{f0(c.riissCalc.macros.p.g)} g</div>
-                <div className="text-2xs text-text-muted">{c.riissCalc.macros.p.pct}% · {c.riissCalc.macros.p.gkg} g/kg</div>
-              </div>
-              <div className="p-2 rounded bg-surface border border-line">
-                <div className="text-text-muted text-2xs">Carbohidratos</div>
-                <div className="font-bold text-sm text-text-primary">{f0(c.riissCalc.macros.c.g)} g</div>
-                <div className="text-2xs text-text-muted">{c.riissCalc.macros.c.pct}% del VCT</div>
-              </div>
-              <div className="p-2 rounded bg-surface border border-line">
-                <div className="text-text-muted text-2xs">Lípidos</div>
-                <div className="font-bold text-sm text-text-primary">{f0(c.riissCalc.macros.l.g)} g</div>
-                <div className="text-2xs text-text-muted">{c.riissCalc.macros.l.pct}% del VCT</div>
+              {/* Selector de modo de cálculo RIISS */}
+              <div className="flex items-center gap-2 bg-surface p-1 rounded-lg border border-line">
+                <span className="text-2xs font-medium text-text-muted px-1">Base cálculo:</span>
+                <button
+                  type="button"
+                  className={`px-2 py-0.5 rounded text-2xs font-semibold transition ${
+                    r.rissBaseMode !== 'total' ? 'bg-brand text-white' : 'text-text-muted hover:text-text-primary'
+                  }`}
+                  onClick={() => {
+                    upd(x => {
+                      let y = setIn(x, 'req.rissBaseMode', 'peso');
+                      const rRes = calculateRiissEnergyAndMacros(y, c, { baseMode: 'peso' });
+                      if (rRes?.macros) {
+                        y = setIn(y, 'req.pct', {
+                          p: String(rRes.macros.p.pct),
+                          c: String(rRes.macros.c.pct),
+                          l: String(rRes.macros.l.pct)
+                        });
+                      }
+                      return y;
+                    });
+                  }}
+                  title="Calcula multiplicando kcal/kg y g/kg por el peso real o ajustado del paciente"
+                >
+                  Por peso (kcal/kg)
+                </button>
+                <button
+                  type="button"
+                  className={`px-2 py-0.5 rounded text-2xs font-semibold transition ${
+                    r.rissBaseMode === 'total' ? 'bg-brand text-white' : 'text-text-muted hover:text-text-primary'
+                  }`}
+                  onClick={() => {
+                    upd(x => {
+                      let y = setIn(x, 'req.rissBaseMode', 'total');
+                      const rRes = calculateRiissEnergyAndMacros(y, c, { baseMode: 'total' });
+                      if (rRes?.macros) {
+                        y = setIn(y, 'req.pct', {
+                          p: String(rRes.macros.p.pct),
+                          c: String(rRes.macros.c.pct),
+                          l: String(rRes.macros.l.pct)
+                        });
+                      }
+                      return y;
+                    });
+                  }}
+                  title="Utiliza los valores totales fijos de calorías y proteína de la tabla de referencia INCAP/RIISS"
+                >
+                  Totales tabla (kcal fijas)
+                </button>
               </div>
             </div>
+
+            {/* Selector opcional de etapa de lactancia para mujeres */}
+            {p.gen?.sexo === 'F' && !c.isEmbarazada && (
+              <div className="flex items-center gap-2 text-xs bg-surface/80 p-2 rounded border border-line">
+                <span className="font-medium text-text-muted">Estado de lactancia (adicional INCAP):</span>
+                <select
+                  className="input input-xs bg-surface"
+                  value={p.gen?.lactanciaEtapa || ''}
+                  onChange={e => {
+                    const val = e.target.value;
+                    upd(x => {
+                      let y = setIn(x, 'gen.lactanciaEtapa', val);
+                      y = setIn(y, 'gen.lactancia', Boolean(val));
+                      return y;
+                    });
+                  }}
+                >
+                  <option value="">No lactante / Sin adición</option>
+                  <option value="m0_6">Primeros 6 meses (+600 kcal/día, +26 g proteína)</option>
+                  <option value="m7_12">De 7 a 12 meses (+0 kcal/día, +18 g proteína)</option>
+                </select>
+              </div>
+            )}
+
+            {/* Tarjetas de Macronutrientes RIISS */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
+              <div className="p-2.5 rounded-lg bg-surface border border-line shadow-2xs">
+                <div className="text-text-muted text-2xs uppercase tracking-wide">Energía Total</div>
+                <div className="font-bold text-base text-brand">{f0(c.riissCalc.vct)} kcal</div>
+                <div className="text-2xs text-text-muted mt-0.5">{c.riissCalc.kcalKg} kcal/kg</div>
+              </div>
+              <div className="p-2.5 rounded-lg bg-surface border border-line shadow-2xs">
+                <div className="text-text-muted text-2xs uppercase tracking-wide">Proteínas</div>
+                <div className="font-bold text-base text-text-primary">{f0(c.riissCalc.macros.p.g)} g</div>
+                <div className="text-2xs text-text-muted mt-0.5">
+                  <span className="font-semibold text-brand">{c.riissCalc.macros.p.pct}%</span> · {c.riissCalc.macros.p.gkg} g/kg
+                </div>
+              </div>
+              <div className="p-2.5 rounded-lg bg-surface border border-line shadow-2xs">
+                <div className="text-text-muted text-2xs uppercase tracking-wide">Carbohidratos</div>
+                <div className="font-bold text-base text-text-primary">{f0(c.riissCalc.macros.c.g)} g</div>
+                <div className="text-2xs text-text-muted mt-0.5">
+                  <span className="font-semibold text-brand">{c.riissCalc.macros.c.pct}%</span> del VCT ({f0(c.riissCalc.macros.c.kcal)} kcal)
+                </div>
+              </div>
+              <div className="p-2.5 rounded-lg bg-surface border border-line shadow-2xs">
+                <div className="text-text-muted text-2xs uppercase tracking-wide">Lípidos</div>
+                <div className="font-bold text-base text-text-primary">{f0(c.riissCalc.macros.l.g)} g</div>
+                <div className="text-2xs text-text-muted mt-0.5">
+                  <span className="font-semibold text-brand">{c.riissCalc.macros.l.pct}%</span> del VCT ({f0(c.riissCalc.macros.l.kcal)} kcal)
+                </div>
+              </div>
+            </div>
+
+            <p className="text-2xs text-text-muted italic">
+              * Nota técnica: Las calorías y proteínas se obtienen de las tablas INCAP 2012 / RIISS MINSAL según edad, sexo y condición fisiológica. Los lípidos se asignan según la meta terapéutica ({c.riissCalc.dietaNombre}) y los carbohidratos se calculan por diferencia ({c.riissCalc.macros.c.pct}% restante) para asegurar un cuadre exacto al 100% del VCT.
+            </p>
           </div>
         )}
 
