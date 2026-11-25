@@ -19,6 +19,7 @@ import MedicationsSection from './components/MedicationsSection.jsx';
 import ExchangePlanSection from './components/ExchangePlanSection.jsx';
 import ClinicalNoteModal from './components/ClinicalNoteModal.jsx';
 import PatientRecommendationsSection from './components/PatientRecommendationsSection.jsx';
+import { calculateRiissEnergyAndMacros } from './data/rissFormulas.js';
 import { exportClinicalReportPDF } from './lib/pdfExport.js';
 
 // ==== LOGIC START ====
@@ -101,6 +102,7 @@ const INGESTA = [['', 'Sin dato'], ['>75', 'Mayor al 75 % de lo requerido'], ['5
 
 const FORMULAS = [
   { k: 'mifflin', n: 'Mifflin-St Jeor', d: 'Estima el gasto en reposo en adultos; muy usada en población general y con sobrepeso.' },
+  { k: 'riss', n: 'RIISS MINSAL (Dietas Hospitalarias El Salvador)', d: 'Norma Oficial RIISS 2014: Adjudica calorías y proteínas según edad, sexo y patología (Anexos 1A y 1B), y calcula automáticamente carbohidratos y lípidos.', isRiiss: true },
   { k: 'hb', n: 'Harris-Benedict (1919)', d: 'Ecuación clásica; puede sobrestimar el gasto en obesidad.' },
   { k: 'hbrev', n: 'Harris-Benedict revisada (Roza-Shizgal)', d: 'Actualización de 1984 de la ecuación original.' },
   { k: 'who', n: 'FAO/OMS/UNU (Schofield)', d: 'Usa solo peso, sexo y grupo de edad (18–30, 30–60, más de 60 años).' },
@@ -113,7 +115,12 @@ const FORMULAS = [
 ];
 const ACT = [['res', 'Sin factor de actividad', 1.0], ['sed', 'Sedentario', 1.2], ['lig', 'Ligera (1–3 días/sem)', 1.375], ['mod', 'Moderada (3–5 días/sem)', 1.55], ['int', 'Intensa (6–7 días/sem)', 1.725], ['muy', 'Muy intensa o trabajo físico', 1.9], ['custom', 'Personalizado', null]];
 const EST = [['none', 'Sin estrés metabólico', 1.0], ['cirm', 'Cirugía menor o electiva', 1.1], ['canc', 'Cáncer o inflamación crónica', 1.2], ['frac', 'Fractura o trauma menor', 1.25], ['sepsis', 'Infección grave o sepsis', 1.3], ['trau', 'Politrauma o TCE', 1.4], ['quem', 'Quemaduras moderadas', 1.5], ['custom', 'Personalizado', null]];
-const PRESETS = [{ n: 'Balanceada 15/55/30', p: 15, c: 55, l: 30 }, { n: 'Hiperproteica 25/45/30', p: 25, c: 45, l: 30 }, { n: 'Control glucémico 20/45/35', p: 20, c: 45, l: 35 }];
+const PRESETS = [
+  { n: 'RIISS 2014 (15/57/28)', p: 15, c: 57, l: 28 },
+  { n: 'Balanceada 15/55/30', p: 15, c: 55, l: 30 },
+  { n: 'Hiperproteica 25/45/30', p: 25, c: 45, l: 30 },
+  { n: 'Control glucémico 20/45/35', p: 20, c: 45, l: 35 }
+];
 
 const GRUPOS = EXCHANGE_GROUPS.map(g => ({
   k: g.k,
@@ -399,11 +406,17 @@ function calc(p) {
     o.caCorregidoFlag = o.caCorregido < 8.5 ? lv('warn', 'Hipocalcemia corregida', '↓') : o.caCorregido > 10.2 ? lv('warn', 'Hipercalcemia corregida', '↑') : lv('ok', 'Normal', '✓');
   }
 
+  // Siempre calcular la referencia normativa RIISS 2014 (para uso directo o comparativo)
+  const riissRes = calculateRiissEnergyAndMacros(p, o);
+  o.riissCalc = riissRes;
+
   // Gasto energético
   const F = r.formula, W = o.wCalc, A = edad, M = sexo === 'M';
   o.kgMode = !!(FORMULAS.find(x => x.k === F) || {}).kg;
   let geb = null;
-  if (F === 'embarazo_iom' && W && talla && A != null) {
+  if (F === 'riss') {
+    geb = riissRes.vct;
+  } else if (F === 'embarazo_iom' && W && talla && A != null) {
     const baseGeb = 10 * W + 6.25 * talla - 5 * A - 161;
     const sem = semGest || 20;
     const trimAdd = sem < 14 ? 0 : sem < 28 ? 340 : 452;
@@ -431,7 +444,7 @@ function calc(p) {
   o.etaPct = etaPct;
   o.etaKcal = geb == null ? 0 : Math.round(geb * (etaPct / 100));
 
-  o.get = geb == null ? null : o.kgMode ? geb : Math.round(geb * o.af * o.fe + o.etaKcal);
+  o.get = geb == null ? null : (o.kgMode || F === 'riss') ? geb : Math.round(geb * o.af * o.fe + o.etaKcal);
   o.ajuste = num(r.ajuste) || 0;
   o.vct = o.get == null ? null : o.get + o.ajuste;
   o.kcalkg = o.vct && W ? o.vct / W : null;
@@ -1768,6 +1781,17 @@ function TabReq() {
     upd(x => {
       let y = setIn(x, 'req.formula', k);
       if (f.kg) y = setIn(y, 'req.kcalkg', f.def);
+      if (k === 'riss') {
+        const riissRes = calculateRiissEnergyAndMacros(x, c);
+        if (riissRes && riissRes.macros) {
+          y = setIn(y, 'req.pct', {
+            p: String(riissRes.macros.p.pct),
+            c: String(riissRes.macros.c.pct),
+            l: String(riissRes.macros.l.pct)
+          });
+          y = setIn(y, 'req.modo', 'pct');
+        }
+      }
       return y;
     });
   };
@@ -1836,6 +1860,83 @@ function TabReq() {
                 Para prevenir el Síndrome de Realimentación, se aconseja pautar inicialmente entre <strong>10 y 15 kcal/kg/día</strong> (aprox. {f0(c.wCalc * 12)} kcal/día) con bajo aporte de carbohidratos simples y progresión gradual cada 48-72 h.
               </p>
             </div>
+          </div>
+        )}
+
+        {/* Banner Informativo cuando se utiliza la Norma RIISS 2014 */}
+        {r.formula === 'riss' && c.riissCalc && (
+          <div className="card p-4 border-2 border-brand bg-brand-soft/20 rounded-xl">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
+              <div className="flex items-center gap-2">
+                <span className="badge bg-brand text-white font-bold text-xs px-2.5 py-1 rounded">
+                  RIISS · MINSAL 2014
+                </span>
+                <span className="font-semibold text-sm text-text-primary">
+                  {c.riissCalc.dietaNombre}
+                </span>
+              </div>
+              <button
+                type="button"
+                className="btn btn-xs btn-primary shadow-xs"
+                onClick={() => {
+                  if (c.riissCalc?.macros) {
+                    upd(x => {
+                      let y = setIn(x, 'req.pct', {
+                        p: String(c.riissCalc.macros.p.pct),
+                        c: String(c.riissCalc.macros.c.pct),
+                        l: String(c.riissCalc.macros.l.pct)
+                      });
+                      return setIn(y, 'req.modo', 'pct');
+                    });
+                  }
+                }}
+              >
+                ⚡ Sincronizar macros RIISS
+              </button>
+            </div>
+            <p className="text-xs text-text-muted mb-2">
+              Referencia: <strong>{c.riissCalc.tablaOrigen}</strong> · Grupo: <strong>{c.riissCalc.grupoLabel}</strong>
+            </p>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
+              <div className="p-2 rounded bg-surface border border-line">
+                <div className="text-text-muted text-2xs">Energía Total</div>
+                <div className="font-bold text-sm text-brand">{f0(c.riissCalc.vct)} kcal</div>
+                <div className="text-2xs text-text-muted">{c.riissCalc.kcalKg} kcal/kg</div>
+              </div>
+              <div className="p-2 rounded bg-surface border border-line">
+                <div className="text-text-muted text-2xs">Proteínas</div>
+                <div className="font-bold text-sm text-text-primary">{f0(c.riissCalc.macros.p.g)} g</div>
+                <div className="text-2xs text-text-muted">{c.riissCalc.macros.p.pct}% · {c.riissCalc.macros.p.gkg} g/kg</div>
+              </div>
+              <div className="p-2 rounded bg-surface border border-line">
+                <div className="text-text-muted text-2xs">Carbohidratos</div>
+                <div className="font-bold text-sm text-text-primary">{f0(c.riissCalc.macros.c.g)} g</div>
+                <div className="text-2xs text-text-muted">{c.riissCalc.macros.c.pct}% del VCT</div>
+              </div>
+              <div className="p-2 rounded bg-surface border border-line">
+                <div className="text-text-muted text-2xs">Lípidos</div>
+                <div className="font-bold text-sm text-text-primary">{f0(c.riissCalc.macros.l.g)} g</div>
+                <div className="text-2xs text-text-muted">{c.riissCalc.macros.l.pct}% del VCT</div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {r.formula !== 'riss' && (
+          <div className="p-3 bg-surface-muted/60 border border-line rounded-lg flex items-center justify-between gap-3 text-xs">
+            <div>
+              <span className="font-semibold text-brand">Norma Hospitalaria RIISS 2014 disponible:</span>{' '}
+              <span className="text-text-muted">
+                {c.riissCalc ? `${c.riissCalc.dietaNombre} (${f0(c.riissCalc.vct)} kcal, ${f0(c.riissCalc.macros.p.g)}g P, ${f0(c.riissCalc.macros.c.g)}g CHO, ${f0(c.riissCalc.macros.l.g)}g L)` : 'Calcula calorías y macros normativos según edad, sexo y patología.'}
+              </span>
+            </div>
+            <button
+              type="button"
+              className="btn btn-xs btn-outline shrink-0 text-brand border-brand/30 hover:bg-brand-soft"
+              onClick={() => onFormula('riss')}
+            >
+              Usar RIISS 2014
+            </button>
           </div>
         )}
 

@@ -397,7 +397,7 @@ export function exportClinicalReportPDF({ p, c, SINT, PATOL, RECALL, FORMULAS, p
     body: [
       [
         { content: 'Fórmula:', styles: { fontStyle: 'bold' } },
-        cleanStr(F.n + (c.kgMode ? '' : ` (GEB: ${f0(c.geb)} kcal, ETA: +${f0(c.etaKcal)} kcal)`)),
+        cleanStr(F.n + (p.req.formula === 'riss' ? (c.riissCalc ? ` [${c.riissCalc.tablaOrigen} · ${c.riissCalc.dietaNombre}]` : ' [Lineamientos RIISS 2014]') : c.kgMode ? '' : ` (GEB: ${f0(c.geb)} kcal, ETA: +${f0(c.etaKcal)} kcal)`)),
         { content: 'Peso de cálculo:', styles: { fontStyle: 'bold' } },
         c.wCalc != null ? `${f1(c.wCalc)} kg${p.req.pesoBase === 'seco' ? ' (Seco)' : ''}` : '—',
         { content: 'VCT Prescrito:', styles: { fontStyle: 'bold' } },
