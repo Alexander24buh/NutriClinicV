@@ -1,8 +1,9 @@
-// Motor de Menús Típicos Salvadoreños en 5 Tiempos de Comida
-// Integrado con Sistema de Intercambios ADA, Niveles de Costo (Económico, Regular, Más Costoso)
+// Motor de Menús Típicos Salvadoreños en 5 Tiempos de Comida y Planificador Semanal (7 Días)
+// Integrado con Sistema de Intercambios ADA (tabla_intercambios.xlsx), Niveles de Costo
 // y Adaptaciones Clínicas de Seguridad RIISS 2014 (MINSAL)
 
 import { EXCHANGE_GROUPS, MEAL_TIMES } from './exchangeDatabase.js';
+import { SALVADORAN_DISHES, DAYS_OF_WEEK } from './salvadoranDishes.js';
 
 export const COST_LEVELS = [
   {
@@ -56,235 +57,482 @@ export function getRiissAdaptationNotes(rissData = {}) {
   return notes;
 }
 
-// Catálogo de componentes de platos salvadoreños por grupo de intercambio y nivel de costo
-const SALVADORAN_ITEMS = {
-  economico: {
-    almidones: {
-      des: (n) => {
-        if (n === 1) return '1 tortilla de maíz nixtamalizado caliente del comal (1 almidón)';
-        if (n === 2) return '2 tortillas de maíz del comal o 1 tortilla + ½ taza de frijoles salcochados enteros (2 almidones)';
-        if (n === 3) return '½ taza de frijoles negros o rojos de la olla (1) + 2 tortillas de maíz nixtamalizado (2) [Total: 3 almidones]';
-        if (n === 4) return '½ taza de frijoles de la olla (1) + ½ taza de plátano salcochado en rodajas (1) + 2 tortillas de maíz (2) [Total: 4 almidones]';
-        return `½ taza de frijoles salcochados + ½ taza de plátano hervido + ${n - 2} tortillas de maíz del comal [Total: ${n} almidones]`;
-      },
-      c1: (n) => n === 1 ? '1 tortilla de maíz tostada al comal (tipo tostada sin grasa) o 6 galletas de soda (1 almidón)' : `${n} tortillas tostadas al comal o galletas`,
-      alm: (n) => {
-        if (n === 1) return '1 tortilla de maíz caliente o ⅓ taza de arroz blanco cocido con verduras (1 almidón)';
-        if (n === 2) return '1 tortilla de maíz (1) + ⅓ taza de arroz blanco al vapor (1) [Total: 2 almidones]';
-        if (n === 3) return '⅓ taza de arroz al vapor (1) + ½ taza de frijoles de la olla (1) + 1 tortilla de maíz (1) [Total: 3 almidones]';
-        if (n === 4) return '⅓ taza de arroz (1) + ½ taza de frijoles rojos salcochados (1) + ½ taza de yuca o papa hervida (1) + 1 tortilla de maíz (1) [Total: 4 almidones]';
-        return `⅓ taza de arroz + ½ taza de frijoles + ${n - 2} tortillas de maíz nixtamalizado [Total: ${n} almidones]`;
-      },
-      c2: (n) => n === 1 ? '1 tortilla tostada al comal o 3 tazas de palomitas de maíz caseras sin manteca (1 almidón)' : `${n} almidones ligeros de maíz`,
-      cen: (n) => {
-        if (n === 1) return '1 tortilla de maíz del comal o 1 pupusa de maíz tostada al comal rellena de frijol salcochado molido (1 almidón)';
-        if (n === 2) return '2 pupusas saludables de maíz al comal (sin aceite) rellenas de frijol molido sin manteca (2 almidones)';
-        if (n === 3) return '2 pupusas saludables de maíz al comal rellenas de frijol (2) + ½ taza de frijoles de la olla o 1 tortilla adicional (1) [Total: 3 almidones]';
-        return `2 pupusas saludables de maíz al comal (2) + ½ taza de plátano salcochado (1) + ${n - 3} tortilla(s) [Total: ${n} almidones]`;
-      }
-    },
-    prot_magra: {
-      des: (n) => `${n * 2} claras de huevo revueltas con tomate y cebolla picada (estilo huevo picado salvadoreño sin grasa) (${n} prot. magra)`,
-      c1: (n) => `${n} oz de queso fresco tierno desgrasado (${n} prot. magra)`,
-      alm: (n) => `${n} oz (${n * 30} g) de pechuga de pollo desgrasada guisada con tomate, cebolla y chile verde dulce criollo (${n} prot. magra)`,
-      c2: (n) => `${n} oz de requesón magro salvadoreño (${n} prot. magra)`,
-      cen: (n) => `${n} oz (${n * 30} g) de pollo deshebrado en chirmol de tomate cocido o ${n * 2} claras de huevo (${n} prot. magra)`
-    },
-    prot_sm: {
-      des: (n) => n === 1
-        ? '1 huevo entero revuelto con tomate, cebollín y chile verde dulce (1 prot. SM)'
-        : `${n} huevos enteros picados al comal con tomate y cebolla (${n} prot. SM)`,
-      c1: (n) => `${n} oz de quesillo blanco bajo en grasa (${n} prot. SM)`,
-      alm: (n) => `${n} oz (${n * 30} g) de posta de cerdo magra o carne molida de res magra guisada con papa y verduras (${n} prot. SM)`,
-      c2: (n) => `${n} huevo duro sancochado (${n} prot. SM)`,
-      cen: (n) => n === 1
-        ? '1 oz (30 g) de queso fresco artesanal o 1 huevo revuelto tierno (1 prot. SM)'
-        : `${n} oz de queso fresco tierno desgrasado o pollo deshebrado (${n} prot. SM)`
-    },
-    grasas: {
-      des: (n) => {
-        if (n === 1) return '1 cdta de aceite vegetal para el sartén o 2 Cdas (1 oz) de aguacate criollo fresco (1 grasa)';
-        return `1 cdta de aceite para cocinar + ${n - 1} porción(es) de aguacate criollo (2 Cdas c/u) [Total: ${n} grasas]`;
-      },
-      c1: (n) => `${n * 10} maníes o cacahuates salvadoreños tostados al comal sin sal (${n} grasa${n > 1 ? 's' : ''})`,
-      alm: (n) => {
-        if (n === 1) return '1 cdta de aceite para el guisado o 2 Cdas de aguacate criollo (1 grasa)';
-        return `1 cdta de aceite en la preparación + 2 Cdas de aguacate criollo en rodajas [Total: ${n} grasas]`;
-      },
-      c2: (n) => `${n * 10} maníes tostados sin sal o 1 Cda de pepitoria (semillas de ayote tostadas sin sal) (${n} grasa${n > 1 ? 's' : ''})`,
-      cen: (n) => {
-        if (n === 1) return '2 Cdas (1 oz) de aguacate criollo fresco o 1 cdta de aceite de cocción (1 grasa)';
-        return `2 Cdas de aguacate criollo (1) + 1 cdta de aceite vegetal en la cocción (${n - 1}) [Total: ${n} grasas]`;
-      }
-    },
-    veg_sa: {
-      des: '½ taza de chirmol natural cocido (tomate, cebolla y cilantro sin grasa)',
-      c1: '1 taza de pepino criollo con salpicón de limón',
-      alm: '1 taza de sopa de verduras criolla colada/escurrida (güisquil, pipián y ayote tierno hervidos) + ensalada de pepino y rábano',
-      c2: '1 taza de bastones de jícama fresca con limón',
-      cen: '½ taza de pipián o güisquil salcochado en trozos con hierbabuena y tomate'
-    },
-    frutas: {
-      des: '1 taza de papaya criolla fresca picada en cubos',
-      c1: '1 guineo de seda mediano (o 1 mango verde de temporada con limón)',
-      alm: '1 rebanada de sandía fresca en cubos (1¼ taza)',
-      c2: '1 naranja criolla fresca en gajos o 2 guayabas',
-      cen: '1 taza de papaya fresca o 1 rodaja de melón'
-    }
-  },
+// Filtra platillos según la patología activa / prescripción RIISS
+export function filterDishesByClinicalCondition(dishes, rissData = {}) {
+  const activeRiiss = [rissData.primaryDiet, ...(rissData.secondaryDiets || [])].filter(Boolean);
+  const isRenal = activeRiiss.some(d => d.includes('renal') || d.includes('hipoproteica') || d.includes('baja_potasio') || d.includes('baja_fosforo'));
+  const isDiabetes = activeRiiss.some(d => d.includes('baja_cho') || d.includes('hipocalorica'));
+  const isHypertension = activeRiiss.some(d => d.includes('hiposodica'));
+  const isLowFat = activeRiiss.some(d => d.includes('baja_grasa'));
 
-  regular: {
-    almidones: {
-      des: (n) => {
-        if (n === 1) return '1 tortilla de maíz nixtamalizado caliente o 1 rebanada de pan de caja integral (1 almidón)';
-        if (n === 2) return '1 taza de atol de avena cocida en agua con canela sin azúcar (2 almidones) o 2 tortillas de maíz';
-        if (n === 3) return '½ taza de frijoles rojos salcochados (1) + 2 tortillas de maíz nixtamalizado (2) [Total: 3 almidones]';
-        if (n === 4) return '½ taza de avena en hojuelas cocida (1) + ½ taza de frijoles (1) + 2 tortillas de maíz (2) [Total: 4 almidones]';
-        return `½ taza de avena cocida + ½ taza de frijoles + ${n - 2} tortillas de maíz [Total: ${n} almidones]`;
-      },
-      c1: (n) => n === 1 ? '5 galletas de trigo integral o 2 tortitas de arroz horneadas (1 almidón)' : `${n} opciones de almidón integral`,
-      alm: (n) => {
-        if (n === 1) return '⅓ taza de arroz blanco o integral cocido con ejotes (1 almidón)';
-        if (n === 2) return '⅔ taza de arroz blanco al vapor con zanahoria picada (2 almidones)';
-        if (n === 3) return '⅓ taza de arroz blanco con vegetales (1) + ½ taza de frijoles rojos de la olla (1) + 1 tortilla de maíz (1) [Total: 3 almidones]';
-        if (n === 4) return '⅔ taza de arroz con verduras (2) + ½ taza de lentejas o frijoles (1) + 1 tortilla de maíz (1) [Total: 4 almidones]';
-        return `⅔ taza de arroz + ½ taza de frijoles + ${n - 2} tortillas de maíz [Total: ${n} almidones]`;
-      },
-      c2: (n) => n === 1 ? '6 galletas de soda o 3 cuadrados de galleta Graham (1 almidón)' : `${n} galletas horneadas`,
-      cen: (n) => {
-        if (n === 1) return '1 tortilla de maíz caliente o ½ taza de frijoles salcochados (1 almidón)';
-        if (n === 2) return '2 pupusas saludables de masa de maíz hechas al comal sin grasa (rellenas de quesillo desgrasado y frijol sin manteca) (2 almidones)';
-        if (n === 3) return '2 pupusas de maíz al comal (2) + ½ taza de frijoles cocidos o 1 tortilla (1) [Total: 3 almidones]';
-        return `2 pupusas de maíz al comal (2) + ½ taza de plátano cocido (1) + ${n - 3} tortilla(s) [Total: ${n} almidones]`;
-      }
-    },
-    prot_magra: {
-      des: (n) => `${n * 2} claras de huevo revueltas con loroco fresco picado y tomate (${n} prot. magra)`,
-      c1: (n) => `${n * 0.25} taza de requesón magro o ${n} oz de jamón de pechuga de pavo bajo en sodio (${n} prot. magra)`,
-      alm: (n) => `${n} oz (${n * 30} g) de pechuga de pollo a la plancha entomatada con orégano y laurel (${n} prot. magra)`,
-      c2: (n) => `${n} oz de queso fresco desgrasado o requesón (${n} prot. magra)`,
-      cen: (n) => `${n} oz (${n * 30} g) de pechuga de pollo deshebrada salteada con ejotes y tomate (${n} prot. magra)`
-    },
-    prot_sm: {
-      des: (n) => n === 1
-        ? '1 huevo entero revuelto con loroco tierno y chirmol (1 prot. SM)'
-        : `${n} huevos revueltos con loroco o 1 huevo + 1 oz de quesillo desgrasado (${n} prot. SM)`,
-      c1: (n) => `${n} oz de quesillo salvadoreño bajo en grasa (${n} prot. SM)`,
-      alm: (n) => `${n} oz (${n * 30} g) de carne de res magra (corte de salón o bolovique) guisada con tomate y hierbas (${n} prot. SM)`,
-      c2: (n) => `${n} huevo duro cocido con una pizca de orégano (${n} prot. SM)`,
-      cen: (n) => n === 1
-        ? '1 oz (30 g) de queso fresco tierno desgrasado o quesillo en la pupusa (1 prot. SM)'
-        : `${n} oz de quesillo bajo en grasa o carne deshebrada (${n} prot. SM)`
-    },
-    grasas: {
-      des: (n) => {
-        if (n === 1) return '1 cdta de aceite de oliva o canola para el comal / sartén (1 grasa)';
-        return `1 cdta de aceite para cocinar (1) + 2 Cdas (1 oz) de aguacate fresco (1) [Total: ${n} grasas]`;
-      },
-      c1: (n) => `${n * 6} almendras o ${n * 10} maníes horneados sin sal (${n} grasa${n > 1 ? 's' : ''})`,
-      alm: (n) => {
-        if (n === 1) return '1 cdta de aceite de oliva en la preparación del pollo (1 grasa)';
-        return `1 cdta de aceite de oliva para cocinar (1) + 2 Cdas de aguacate fresco en la ensalada (1) [Total: ${n} grasas]`;
-      },
-      c2: (n) => `${n * 6} almendras tostadas sin sal o 1½ cdta de mantequilla de maní natural (${n} grasa${n > 1 ? 's' : ''})`,
-      cen: (n) => {
-        if (n === 1) return '2 Cdas (1 oz) de aguacate fresco en rodajas (1 grasa)';
-        return `2 Cdas de aguacate fresco (1) + 1 cdta de aceite vegetal para la cocción (${n - 1}) [Total: ${n} grasas]`;
-      }
-    },
-    veg_sa: {
-      des: '½ taza de vegetales salteados (tomate, cebollín y loroco fresco)',
-      c1: '1 taza de bastones de zanahoria y pepino fresco con limón',
-      alm: '½ taza de ejotes tiernos y zanahoria al vapor + 1 taza de ensalada verde (lechuga, tomate y rábano)',
-      c2: '1 taza de pepino y apio con limón y una pizca de orégano',
-      cen: '½ taza de pipián tierno salteado con tomate + curtido salvadoreño natural sin chile'
-    },
-    frutas: {
-      des: '1 manzana pequeña fresca (o ¾ taza de piña salvadoreña en trozos)',
-      c1: '1 pera mediana fresca o 1 taza de papaya en cubos',
-      alm: '¾ taza de piña fresca picada con unas gotas de limón',
-      c2: '1¼ taza de fresas frescas enteras o 1 mandarina',
-      cen: '1 manzana pequeña o ½ taza de compota de manzana casera sin azúcar'
+  return dishes.filter(dish => {
+    // Si es diabético, excluir postres con azúcar o panela libre
+    if (isDiabetes && dish.clinicalTags?.includes('hipercalorica_only')) {
+      return false;
     }
-  },
+    // Si es bajo en grasa, evitar platillos de cerdo graso o embutidos
+    if (isLowFat && dish.clinicalTags?.includes('high_fat')) {
+      return false;
+    }
+    return true;
+  });
+}
 
-  costoso: {
-    almidones: {
-      des: (n) => {
-        if (n === 1) return '1 rebanada de pan de molde integral de masa madre tostado o 1 tortilla de maíz (1 almidón)';
-        if (n === 2) return '2 rebanadas de pan integral de masa madre o 1 taza de avena cocida con semillas (2 almidones)';
-        if (n === 3) return '½ taza de frijoles negros parados (1) + 2 tortillas de maíz nixtamalizado o 2 rebanadas de pan integral (2) [Total: 3 almidones]';
-        if (n === 4) return '½ taza de avena cocida (1) + ½ taza de frijoles negros (1) + 2 rebanadas de pan integral (2) [Total: 4 almidones]';
-        return `Avena en hojuelas + frijoles negros + pan integral de masa madre [Total: ${n} almidones]`;
-      },
-      c1: (n) => n === 1 ? '2 tortitas de arroz inflado integral horneadas (rice cakes) o 1 barra de granola horneada (1 almidón)' : `${n} opciones de almidón horneado`,
-      alm: (n) => {
-        if (n === 1) return '⅓ taza de quinua perlada cocida o arroz integral al vapor (1 almidón)';
-        if (n === 2) return '⅓ taza de arroz integral (1) + ½ taza de papa horneada con romero y cáscara (1) [Total: 2 almidones]';
-        if (n === 3) return '⅓ taza de arroz integral al vapor (1) + ½ taza de lentejas cocidas (1) + 1 tortilla de maíz (1) [Total: 3 almidones]';
-        if (n === 4) return '⅓ taza de quinua (1) + ½ taza de papa o camote al horno (1) + ½ taza de lentejas (1) + 1 tortilla de maíz (1) [Total: 4 almidones]';
-        return `Quinua o arroz integral + papa horneada + legumbres [Total: ${n} almidones]`;
-      },
-      c2: (n) => n === 1 ? '3 galletas de trigo horneadas o 2 tortitas de arroz (1 almidón)' : `${n} almidones integrales`,
-      cen: (n) => {
-        if (n === 1) return '½ taza de papa horneada con romero o 1 rebanada de pan integral de centeno (1 almidón)';
-        if (n === 2) return '½ taza de papa cocida al vapor (1) + 1 tortilla de maíz o pan pita integral (1) [Total: 2 almidones]';
-        if (n === 3) return '½ taza de frijoles negros cocidos (1) + 2 tortillas de maíz caliente (2) [Total: 3 almidones]';
-        return `Papa cocida + frijoles negros + tortillas de maíz [Total: ${n} almidones]`;
+// Escala dinámicamente un platillo salvadoreño para que coincida exactamente con los intercambios asignados a un tiempo de comida
+export function scaleDishToMealExchanges(dish, mealExchanges = {}, options = {}) {
+  if (!dish) return null;
+
+  const { rissData = {} } = options;
+  const activeRiiss = [rissData.primaryDiet, ...(rissData.secondaryDiets || [])].filter(Boolean);
+  const isLowK = activeRiiss.includes('baja_potasio');
+  const isLowNa = activeRiiss.some(d => d.includes('hiposodica'));
+  const isBland = activeRiiss.includes('blanda') || activeRiiss.includes('mec_suave');
+
+  // Intercambios asignados al tiempo de comida
+  const targetAlm = parseFloat(String(mealExchanges.almidones || 0).replace(',', '.')) || 0;
+  const targetPM = parseFloat(String(mealExchanges.prot_magra || 0).replace(',', '.')) || 0;
+  const targetPSM = parseFloat(String(mealExchanges.prot_sm || 0).replace(',', '.')) || 0;
+  const targetPG = parseFloat(String(mealExchanges.prot_grasa || 0).replace(',', '.')) || 0;
+  const targetGrasa = parseFloat(String(mealExchanges.grasas || 0).replace(',', '.')) || 0;
+  const targetVeg = parseFloat(String(mealExchanges.veg_sa || 0).replace(',', '.')) || 0;
+  const targetFruta = parseFloat(String(mealExchanges.frutas || 0).replace(',', '.')) || 0;
+  const targetLacteo = (parseFloat(String(mealExchanges.leche_sd || 0).replace(',', '.')) || 0) +
+                       (parseFloat(String(mealExchanges.leche_dc || 0).replace(',', '.')) || 0) +
+                       (parseFloat(String(mealExchanges.leche_entera || 0).replace(',', '.')) || 0);
+  const targetOtrosCho = parseFloat(String(mealExchanges.otros_cho || 0).replace(',', '.')) || 0;
+
+  const totalTargetProt = targetPM + targetPSM + targetPG;
+
+  const scaledIngredients = [];
+
+  // 1. Escalar Almidones (tortillas, frijoles, plátano, arroz, yuca, papas)
+  const baseAlmIngs = dish.ingredients.filter(ing => ing.exchangeGroup === 'almidones');
+  if (targetAlm > 0) {
+    if (baseAlmIngs.length === 1) {
+      const ing = baseAlmIngs[0];
+      const scaledQty = ing.baseQty * (targetAlm / (ing.exchanges || 1));
+      let displayUnit = ing.unit;
+      if (ing.name.toLowerCase().includes('tortilla')) {
+        const count = Math.max(1, Math.round(targetAlm));
+        displayUnit = count === 1 ? 'tortilla caliente' : 'tortillas calientes del comal';
+        scaledIngredients.push({
+          name: `${count} ${displayUnit} de maíz nixtamalizado`,
+          measure: `${count} unidad(es)`,
+          group: 'almidones',
+          exchanges: targetAlm,
+          cho: targetAlm * 15,
+          p: targetAlm * 3,
+          l: targetAlm * 1,
+          kcal: targetAlm * 80
+        });
+      } else {
+        scaledIngredients.push({
+          name: ing.name,
+          measure: `${scaledQty.toFixed(scaledQty % 1 === 0 ? 0 : 2)} ${displayUnit}`,
+          group: 'almidones',
+          exchanges: targetAlm,
+          cho: targetAlm * 15,
+          p: targetAlm * 3,
+          l: targetAlm * 1,
+          kcal: targetAlm * 80
+        });
       }
-    },
-    prot_magra: {
-      des: (n) => `${n * 2} claras de huevo en omelette tierno con espinacas y ${n * 0.25} taza de requesón descremado (${n} prot. magra)`,
-      c1: (n) => `${n} oz de pechuga de pavo ahumada artesanal baja en sodio (${n} prot. magra)`,
-      alm: (n) => `${n} oz (${n * 30} g) de filete de corvina fresca o tilapia a la plancha con ajo, perejil y rocío de limón (${n} prot. magra)`,
-      c2: (n) => `${n * 0.25} taza de requesón magro o ${n} oz de atún en agua escurrido (${n} prot. magra)`,
-      cen: (n) => `${n} oz (${n * 30} g) de filete de pescado blanco al horno en papillote con finas hierbas o lomito de res magro (${n} prot. magra)`
-    },
-    prot_sm: {
-      des: (n) => n === 1
-        ? '1 huevo pochado escalfado sobre rodajas de tomate y albahaca (1 prot. SM)'
-        : `${n} huevos pochados o 1 huevo + 1 oz de queso mozzarella magro (${n} prot. SM)`,
-      c1: (n) => `${n} oz de queso mozzarella light o queso feta (${n} prot. SM)`,
-      alm: (n) => `${n} oz (${n * 30} g) de lomito de res asado a la parrilla con chimichurri casero sin sal excesiva (${n} prot. SM)`,
-      c2: (n) => `${n} huevo cocido o 1 oz de queso mozzarella fresco (${n} prot. SM)`,
-      cen: (n) => n === 1
-        ? '1 oz (30 g) de queso fresco artesanal desgrasado o salmón a la plancha (1 prot. SM)'
-        : `${n} oz de filete de pescado o pollo deshebrado (${n} prot. SM)`
-    },
-    grasas: {
-      des: (n) => {
-        if (n === 1) return '2 Cdas (1 oz) de aguacate Hass fresco en rebanadas (1 grasa monoinsaturada)';
-        return `2 Cdas de aguacate Hass (1) + 1 cdta de aceite de oliva virgen extra en cocción (${n - 1}) [Total: ${n} grasas]`;
-      },
-      c1: (n) => `${n * 6} almendras enteras tostadas sin sal o ${n * 8} semillas de marañón salvadoreño tostadas sin sal (${n} grasa${n > 1 ? 's' : ''})`,
-      alm: (n) => {
-        if (n === 1) return '1 cdta de aceite de oliva virgen extra para aderezar la ensalada o asar el pescado (1 grasa)';
-        return `1 cdta de aceite de oliva virgen extra (1) + 2 Cdas de aguacate Hass en la ensalada (1) [Total: ${n} grasas]`;
-      },
-      c2: (n) => `${n * 4} mitades de nuez de nogal o ${n * 8} semillas de marañón tostadas sin sal (${n} grasa${n > 1 ? 's' : ''})`,
-      cen: (n) => {
-        if (n === 1) return '2 Cdas (1 oz) de aguacate Hass en rebanadas o 1 cdta de aceite de oliva virgen extra (1 grasa)';
-        return `2 Cdas de aguacate Hass (1) + 1 cdta de aceite de oliva virgen extra (${n - 1}) [Total: ${n} grasas]`;
+    } else if (baseAlmIngs.length > 1) {
+      // Repartir proporcionalmente los almidones entre los componentes del plato
+      let remAlm = targetAlm;
+      // Asignar al menos 1 intercambio a tortillas si existen, y el resto a legumbres/arroz/tubérculos
+      const hasTortilla = baseAlmIngs.find(i => i.name.toLowerCase().includes('tortilla'));
+      const otherAlms = baseAlmIngs.filter(i => !i.name.toLowerCase().includes('tortilla'));
+
+      if (hasTortilla && remAlm > 1) {
+        const tortCount = remAlm >= 3 ? 2 : 1;
+        scaledIngredients.push({
+          name: `${tortCount} ${tortCount === 1 ? 'tortilla de maíz nixtamalizado del comal' : 'tortillas de maíz del comal'}`,
+          measure: `${tortCount} unidad(es)`,
+          group: 'almidones',
+          exchanges: tortCount,
+          cho: tortCount * 15,
+          p: tortCount * 3,
+          l: tortCount * 1,
+          kcal: tortCount * 80
+        });
+        remAlm -= tortCount;
       }
-    },
-    veg_sa: {
-      des: '½ taza de espinacas baby y champiñones salteados en aceite de oliva con tomate cherry',
-      c1: '1 taza de apio fresco y pepino en bastones con jugo de limón y menta',
-      alm: '½ taza de espárragos o ejotes al vapor + 1 taza de ensalada verde mixta (rúcula, espinaca y tomate cherry)',
-      c2: '1 taza de pepino persa y pimientos dulces en julianas',
-      cen: '½ taza de zucchini (calabacín verde) y berenjena asada a la plancha con finas hierbas'
-    },
-    frutas: {
-      des: '1¼ taza de fresas frescas enteras o ¾ taza de arándanos (blueberries)',
-      c1: '1 manzana verde o pera mediana fresca',
-      alm: '¾ taza de piña fresca con kiwi en rebanadas o papaya dulce',
-      c2: '¾ taza de arándanos frescos o 1 durazno mediano fresco',
-      cen: '½ taza de kiwi o 1 manzana verde cocida al vapor con canela'
+
+      if (otherAlms.length > 0 && remAlm > 0) {
+        const portionEach = remAlm / otherAlms.length;
+        otherAlms.forEach(ing => {
+          const qty = ing.baseQty * (portionEach / (ing.exchanges || 1));
+          scaledIngredients.push({
+            name: ing.name,
+            measure: `${qty.toFixed(qty % 1 === 0 ? 0 : 2)} ${ing.unit}`,
+            group: 'almidones',
+            exchanges: portionEach,
+            cho: portionEach * 15,
+            p: portionEach * 3,
+            l: portionEach * 1,
+            kcal: portionEach * 80
+          });
+        });
+      }
+    } else {
+      // El plato base no tenía almidón explícito, añadir tortilla de maíz o frijol
+      scaledIngredients.push({
+        name: `${targetAlm} tortilla(s) de maíz nixtamalizado del comal (o arroz al vapor)`,
+        measure: `${targetAlm} unidad(es)`,
+        group: 'almidones',
+        exchanges: targetAlm,
+        cho: targetAlm * 15,
+        p: targetAlm * 3,
+        l: targetAlm * 1,
+        kcal: targetAlm * 80
+      });
     }
   }
-};
 
-// Generador de menús salvadoreños en 3, 4 o 5 tiempos según intercambios, nivel de costo y reglas RIISS
+  // 2. Escalar Proteínas (pollo, res, pescado, huevo, quesillo/cuajada)
+  const baseProtIngs = dish.ingredients.filter(ing => ['prot_magra', 'prot_sm', 'prot_grasa'].includes(ing.exchangeGroup));
+  if (totalTargetProt > 0) {
+    if (baseProtIngs.length > 0) {
+      const primaryProt = baseProtIngs[0];
+      const targetOz = totalTargetProt;
+      const isEgg = primaryProt.name.toLowerCase().includes('huevo') || primaryProt.unit.includes('unidad');
+      const measureStr = isEgg
+        ? `${Math.round(targetOz)} huevo(s) entero(s) o claras revueltas`
+        : `${(targetOz * 30).toFixed(0)} g (${targetOz.toFixed(1)} oz)`;
+
+      scaledIngredients.push({
+        name: primaryProt.name,
+        measure: measureStr,
+        group: primaryProt.exchangeGroup,
+        exchanges: totalTargetProt,
+        cho: 0,
+        p: totalTargetProt * 7,
+        l: targetPM * 2 + targetPSM * 5 + targetPG * 8,
+        kcal: targetPM * 45 + targetPSM * 75 + targetPG * 100
+      });
+    } else {
+      scaledIngredients.push({
+        name: 'Proteína salvadoreña (pechuga de pollo desgrasada, huevo o queso fresco)',
+        measure: `${(totalTargetProt * 30).toFixed(0)} g (${totalTargetProt} oz)`,
+        group: 'prot_magra',
+        exchanges: totalTargetProt,
+        cho: 0,
+        p: totalTargetProt * 7,
+        l: totalTargetProt * 3,
+        kcal: totalTargetProt * 55
+      });
+    }
+  }
+
+  // 3. Escalar Vegetales sin Almidón (chirimol, ensalada criolla, curtido, güisquil, pipián)
+  if (targetVeg > 0) {
+    const baseVeg = dish.ingredients.find(i => i.exchangeGroup === 'veg_sa');
+    const vegName = baseVeg ? baseVeg.name : 'Verduras criollas (güisquil, pipián, tomate, pepino y rábano con limón)';
+    const cups = targetVeg === 1 ? '1 taza' : `${targetVeg} tazas`;
+    scaledIngredients.push({
+      name: vegName,
+      measure: `${cups} fresca(s) o al vapor`,
+      group: 'veg_sa',
+      exchanges: targetVeg,
+      cho: targetVeg * 5,
+      p: targetVeg * 2,
+      l: 0,
+      kcal: targetVeg * 25
+    });
+  }
+
+  // 4. Escalar Frutas (papaya, sandía, piña, manzana criolla, melón)
+  if (targetFruta > 0) {
+    const baseFruta = dish.ingredients.find(i => i.exchangeGroup === 'frutas');
+    const frutaName = baseFruta ? baseFruta.name : 'Fruta salvadoreña fresca de temporada (papaya, piña, melón o sandía)';
+    scaledIngredients.push({
+      name: frutaName,
+      measure: `${targetFruta} porción(es) fresca(s) picada(s)`,
+      group: 'frutas',
+      exchanges: targetFruta,
+      cho: targetFruta * 15,
+      p: 0,
+      l: 0,
+      kcal: targetFruta * 60
+    });
+  }
+
+  // 5. Escalar Grasas Saludables (aguacate criollo, aceite de oliva/vegetal, semillas de ayote)
+  if (targetGrasa > 0) {
+    const baseGrasa = dish.ingredients.find(i => i.exchangeGroup === 'grasas');
+    let grasaDesc = '1 cdta de aceite vegetal para cocción';
+    if (targetGrasa === 1) {
+      grasaDesc = baseGrasa ? baseGrasa.name : '2 Cdas (30 g / 1 oz) de aguacate criollo fresco o 1 cdta de aceite';
+    } else if (targetGrasa === 2) {
+      grasaDesc = '2 Cdas de aguacate criollo (1 grasa) + 1 cdta de aceite de oliva en cocción (1 grasa)';
+    } else {
+      grasaDesc = `2 Cdas de aguacate criollo + ${targetGrasa - 1} cdta(s) de aceite vegetal medido`;
+    }
+
+    if (isLowK && grasaDesc.includes('aguacate')) {
+      grasaDesc = `${targetGrasa} cdta(s) de aceite de oliva/vegetal para cocción (Aviso RIISS: aguacate omitido por potasio)`;
+    }
+
+    scaledIngredients.push({
+      name: 'Grasa cardiosaludable (medida)',
+      measure: grasaDesc,
+      group: 'grasas',
+      exchanges: targetGrasa,
+      cho: 0,
+      p: 0,
+      l: targetGrasa * 5,
+      kcal: targetGrasa * 45
+    });
+  }
+
+  // 6. Escalar Lácteos (leche descremada, bebida caliente)
+  if (targetLacteo > 0) {
+    scaledIngredients.push({
+      name: 'Bebida láctea (leche descremada o yogur natural sin grasa)',
+      measure: `${targetLacteo} taza(s) (8 oz)`,
+      group: 'leche_dc',
+      exchanges: targetLacteo,
+      cho: targetLacteo * 12,
+      p: targetLacteo * 8,
+      l: targetLacteo * 2,
+      kcal: targetLacteo * 100
+    });
+  }
+
+  // 7. Otros Carbohidratos (Azúcares o miel)
+  if (targetOtrosCho > 0) {
+    scaledIngredients.push({
+      name: 'Miel de panela pura o dulce tradicional medido',
+      measure: `${targetOtrosCho} Cda(s) rasa(s)`,
+      group: 'otros_cho',
+      exchanges: targetOtrosCho,
+      cho: targetOtrosCho * 15,
+      p: 0,
+      l: 0,
+      kcal: targetOtrosCho * 60
+    });
+  }
+
+  // Sumas nutricionales
+  const totalCho = scaledIngredients.reduce((s, i) => s + (i.cho || 0), 0);
+  const totalP = scaledIngredients.reduce((s, i) => s + (i.p || 0), 0);
+  const totalL = scaledIngredients.reduce((s, i) => s + (i.l || 0), 0);
+  const totalKcal = totalCho * 4 + totalP * 4 + totalL * 9;
+
+  return {
+    dishId: dish.id,
+    dishName: dish.name,
+    description: dish.description,
+    proteinType: dish.proteinType,
+    prepNotes: dish.prepNotes,
+    clinicalNotes: isLowK ? dish.renalNote : null,
+    ingredients: scaledIngredients,
+    totals: {
+      cho: totalCho,
+      p: totalP,
+      l: totalL,
+      kcal: totalKcal
+    }
+  };
+}
+
+// Generador Automático de Menú de 7 Días (Lunes a Domingo)
+// Respeta variedad de proteínas, no repite el plato fuerte en días consecutivos y cuadra intercambios
+export function generate7DaySalvadoranMenu({
+  eqMap = {},
+  costLevel = 'regular',
+  rissData = {},
+  snackConfig = 'both',
+  customOverrides = {}
+}) {
+  const filteredDishes = filterDishesByClinicalCondition(SALVADORAN_DISHES, rissData);
+
+  const breakfasts = filteredDishes.filter(d => d.mealType === 'des');
+  const lunches = filteredDishes.filter(d => d.mealType === 'alm');
+  const dinners = filteredDishes.filter(d => d.mealType === 'cen');
+  const snacks = filteredDishes.filter(d => d.mealType === 'snack');
+
+  // Secuencia de rotación de proteínas para Almuerzo a lo largo de los 7 días
+  // Lun: Aves (Pollo guisado) | Mar: Res (Sopa de res) | Mié: Pescado (Tilapia plancha) | Jue: Vegetariano (Rellenos) | Vie: Aves (Gallo en chicha / Gallina) | Sáb: Pescado o Frijoles | Dom: Res (Carne asada / Chiles rellenos)
+  const proteinRotationOrder = ['aves', 'res', 'pescado', 'vegetariano_huevo', 'aves', 'leguminosa_lacteo', 'res'];
+
+  const weeklySchedule = {};
+
+  DAYS_OF_WEEK.forEach((day, dayIdx) => {
+    const dayKey = day.key;
+    const dayMenu = {
+      dayKey,
+      dayName: day.name,
+      meals: {}
+    };
+
+    MEAL_TIMES.forEach((mt, mIdx) => {
+      const mk = mt.k;
+
+      // Verificar si la merienda está activa según la configuración del paciente
+      if (mk === 'c1' && (snackConfig === 'pm_only' || snackConfig === 'none')) {
+        return;
+      }
+      if (mk === 'c2' && (snackConfig === 'am_only' || snackConfig === 'none')) {
+        return;
+      }
+
+      // Obtener intercambios del tiempo de comida actual
+      const mealExchanges = {};
+      EXCHANGE_GROUPS.forEach(g => {
+        const val = parseFloat(String((eqMap[g.k] || [])[mIdx] || '0').replace(',', '.'));
+        if (val > 0) mealExchanges[g.k] = val;
+      });
+
+      // Si el nutricionista ya asignó un platillo manual específico para este día y tiempo
+      const overrideDishId = customOverrides[`${dayKey}_${mk}`];
+      let selectedDish = null;
+
+      if (overrideDishId) {
+        selectedDish = filteredDishes.find(d => d.id === overrideDishId);
+      }
+
+      if (!selectedDish) {
+        if (mk === 'des') {
+          // Rotar desayunos asegurando variedad
+          const bIdx = (dayIdx + (costLevel === 'costoso' ? 2 : 0)) % breakfasts.length;
+          selectedDish = breakfasts[bIdx] || breakfasts[0];
+        } else if (mk === 'alm') {
+          // Buscar platillo que coincida con la proteína rotada del día
+          const targetProt = proteinRotationOrder[dayIdx % proteinRotationOrder.length];
+          const matchProt = lunches.find(d => d.proteinType === targetProt && (!dayIdx || lunches[(dayIdx - 1) % lunches.length]?.id !== d.id));
+          selectedDish = matchProt || lunches[dayIdx % lunches.length];
+        } else if (mk === 'cen') {
+          // Rotar cenas sin repetir el mismo tipo de proteína del almuerzo de hoy
+          const lunchProt = dayMenu.meals.alm?.proteinType;
+          const matchCen = dinners.find((d, idx) => d.proteinType !== lunchProt && (idx % 7 === dayIdx % dinners.length));
+          selectedDish = matchCen || dinners[dayIdx % dinners.length];
+        } else {
+          // Refrigerios AM / PM
+          const offset = mk === 'c1' ? 0 : 2;
+          selectedDish = snacks[(dayIdx + offset) % snacks.length] || snacks[0];
+        }
+      }
+
+      if (selectedDish) {
+        const scaled = scaleDishToMealExchanges(selectedDish, mealExchanges, { rissData });
+        dayMenu.meals[mk] = {
+          mealTimeName: mt.n,
+          ...scaled
+        };
+      }
+    });
+
+    weeklySchedule[dayKey] = dayMenu;
+  });
+
+  return weeklySchedule;
+}
+
+// Consolida y calcula la Lista de Compras Semanal categorizada a partir del plan de 7 días
+export function calculateWeeklyGroceryList(weeklyPlan = {}) {
+  const categories = {
+    verduras_frutas: {
+      title: 'Verduras, Hortalizas y Frutas Frescas',
+      items: {}
+    },
+    carnes_lacteos: {
+      title: 'Carnes Magras, Huevos y Lácteos Criollos',
+      items: {}
+    },
+    granos_abarrotes: {
+      title: 'Granos, Cereales, Panes y Abarrotes',
+      items: {}
+    },
+    grasas_condimentos: {
+      title: 'Grasas Cardiosaludables, Semillas y Especias',
+      items: {}
+    }
+  };
+
+  Object.values(weeklyPlan).forEach(day => {
+    Object.values(day.meals || {}).forEach(meal => {
+      (meal.ingredients || []).forEach(ing => {
+        let catKey = 'granos_abarrotes';
+        const group = ing.group;
+        const nameLower = (ing.name || '').toLowerCase();
+
+        if (group === 'veg_sa' || group === 'frutas' || nameLower.includes('plátano') || nameLower.includes('yuca') || nameLower.includes('papa')) {
+          catKey = 'verduras_frutas';
+        } else if (['prot_magra', 'prot_sm', 'prot_grasa', 'leche_dc', 'leche_sd', 'leche_entera'].includes(group)) {
+          catKey = 'carnes_lacteos';
+        } else if (group === 'grasas' || nameLower.includes('aceite') || nameLower.includes('alguashte') || nameLower.includes('pepitoria')) {
+          catKey = 'grasas_condimentos';
+        }
+
+        const itemKey = ing.name.trim();
+        if (!categories[catKey].items[itemKey]) {
+          categories[catKey].items[itemKey] = {
+            name: ing.name,
+            measureList: []
+          };
+        }
+        categories[catKey].items[itemKey].measureList.push(ing.measure);
+      });
+    });
+  });
+
+  // Resumir cantidades
+  const formattedList = {};
+  Object.entries(categories).forEach(([catKey, cat]) => {
+    formattedList[catKey] = {
+      title: cat.title,
+      items: Object.values(cat.items).map(item => {
+        const count = item.measureList.length;
+        return {
+          name: item.name,
+          frequency: count,
+          sampleMeasure: item.measureList[0],
+          summary: `${count} vez/veces en la semana (${item.measureList[0]})`
+        };
+      })
+    };
+  });
+
+  return formattedList;
+}
+
+// Guía de Sustitución Rápida / Equivalencias Prácticas para el Paciente
+export function getQuickSubstitutionGuide() {
+  return [
+    {
+      group: '1 Opción de Almidón (15g CHO, 80 kcal)',
+      examples: '1 tortilla de maíz nixtamalizado = ½ taza de frijoles rojos salcochados = ⅓ taza de arroz blanco o integral = ½ taza de plátano sancochado = ½ taza de yuca hervida = 1 rebanada de pan de molde integral = 1 tamal de elote pequeño.'
+    },
+    {
+      group: '1 Opción de Proteína Magra (7g Prot, 45-55 kcal)',
+      examples: '1 oz (30 g) de pechuga de pollo sin piel = 1 oz de filete de pescado fresco (tilapia o corvina) = 2 claras de huevo = ¼ taza de requesón magro salvadoreño = 1 oz de posta de res magra.'
+    },
+    {
+      group: '1 Opción de Proteína Semimagra (7g Prot, 5g Grasa, 75 kcal)',
+      examples: '1 huevo entero cocido o revuelto = 1 oz (30 g) de queso fresco artesanal tierno = 1 oz de quesillo bajo en grasa para pupusas = 1 oz de carne molida de res magra.'
+    },
+    {
+      group: '1 Opción de Vegetales Sin Almidón (5g CHO, 2g Prot, 25 kcal)',
+      examples: '1 taza de vegetales crudos o ½ taza cocidos: güisquil, pipián, tomate, cebolla, pepino, rábano, berro, flor de loroco, ejotes o repollo para curtido.'
+    },
+    {
+      group: '1 Opción de Fruta Fresca (15g CHO, 60 kcal)',
+      examples: '1 taza de papaya picada = 1¼ taza de sandía en cubos = ¾ taza de piña salvadoreña = 1 guineo de seda mediano = 1 naranja criolla en gajos = 1 manzana pequeña.'
+    },
+    {
+      group: '1 Opción de Grasa Saludable (5g Grasa, 45 kcal)',
+      examples: '2 Cdas (30 g) de aguacate criollo fresco = 1 cdta de aceite de oliva o vegetal = 1 Cda de alguashte o pepitoria molida tostada sin sal = 10 maníes tostados.'
+    },
+    {
+      group: '1 Opción de Lácteo Descremado (12g CHO, 8g Prot, 100 kcal)',
+      examples: '1 taza (8 oz / 240 ml) de leche descremada fluida = 1 taza de yogur natural sin azúcar ni grasa.'
+    }
+  ];
+}
+
+// Mantener compatibilidad con la función anterior de 1 día
 export function generateSalvadoranMenu({
   eqMap = {},
   costLevel = 'regular',
@@ -292,123 +540,33 @@ export function generateSalvadoranMenu({
   variantIndex = 0,
   snackConfig = 'both'
 }) {
-  const catalog = SALVADORAN_ITEMS[costLevel] || SALVADORAN_ITEMS.regular;
+  const week = generate7DaySalvadoranMenu({
+    eqMap,
+    costLevel,
+    rissData,
+    snackConfig
+  });
+
+  const dayKeys = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo'];
+  const dayChosen = week[dayKeys[variantIndex % dayKeys.length]] || week.lunes;
+
   const result = {};
-  const activeRiiss = [rissData.primaryDiet, ...(rissData.secondaryDiets || [])].filter(Boolean);
-  const isLowK = activeRiiss.includes('baja_potasio');
-  const isBland = activeRiiss.includes('blanda') || activeRiiss.includes('mec_suave');
-  const isLowFat = activeRiiss.includes('baja_grasa');
-
-  MEAL_TIMES.forEach((meal, mIdx) => {
-    const mk = meal.k;
-
-    // Si la merienda fue eliminada / desactivada por el paciente, no generar menú
-    if (mk === 'c1' && (snackConfig === 'pm_only' || snackConfig === 'none')) {
-      result[mk] = '';
+  MEAL_TIMES.forEach(mt => {
+    const meal = dayChosen.meals[mt.k];
+    if (!meal) {
+      result[mt.k] = '';
       return;
     }
-    if (mk === 'c2' && (snackConfig === 'am_only' || snackConfig === 'none')) {
-      result[mk] = '';
-      return;
-    }
+    const lines = [
+      `🍲 ${meal.dishName}`,
+      meal.description ? `  ${meal.description}` : '',
+      `  • Ingredientes medidos:`,
+      ...meal.ingredients.map(ing => `    - ${ing.name}: ${ing.measure}`),
+      meal.prepNotes ? `  • Preparación: ${meal.prepNotes}` : '',
+      meal.clinicalNotes ? `  • Aviso clínico: ${meal.clinicalNotes}` : ''
+    ].filter(Boolean);
 
-    const parts = [];
-
-    // Paso 1: Revisar intercambios asignados en este tiempo
-    const lechesSD = parseFloat(String((eqMap.leche_sd || [])[mIdx] || '0').replace(',', '.'));
-    const lechesDC = parseFloat(String((eqMap.leche_dc || [])[mIdx] || '0').replace(',', '.'));
-    const lechesEnt = parseFloat(String((eqMap.leche_entera || [])[mIdx] || '0').replace(',', '.'));
-    const incaparina = parseFloat(String((eqMap.incaparina || [])[mIdx] || '0').replace(',', '.'));
-    const totLeche = lechesSD + lechesDC + lechesEnt;
-
-    if (totLeche > 0) {
-      const lecheText = isLowFat || lechesDC > 0
-        ? `${totLeche} taza(s) (8 oz) de leche 100% descremada o yogur natural sin grasa`
-        : `${totLeche} taza(s) (8 oz) de leche semidescremada al 2% o kéfir`;
-      parts.push(`• Bebida láctea: ${lecheText}`);
-    }
-
-    if (incaparina > 0) {
-      parts.push(`• Atol tradicional: ${incaparina} taza(s) de atol de Incaparina caliente cocido en agua con canela`);
-    }
-
-    // Vegetales sin almidón
-    const vegCount = parseFloat(String((eqMap.veg_sa || [])[mIdx] || '0').replace(',', '.'));
-    if (vegCount > 0) {
-      let vegDesc = catalog.veg_sa[mk] || '1 taza de verduras salcochadas o ensalada fresca';
-      if (isLowK) {
-        vegDesc = '1 taza de güisquil, chayote o ejotes cocidos con técnica RIISS de doble hervor y desalado';
-      } else if (isBland) {
-        vegDesc = '½ taza de pipián o chayote cocido tierno sin piel y sin chile';
-      }
-      parts.push(`• Vegetales criollos (${vegCount} int.): ${vegDesc}`);
-    }
-
-    // Frutas
-    const fruitCount = parseFloat(String((eqMap.frutas || [])[mIdx] || '0').replace(',', '.'));
-    if (fruitCount > 0) {
-      let fruitDesc = catalog.frutas[mk] || '1 porción de fruta fresca de temporada';
-      if (isLowK) {
-        fruitDesc = '1 manzana pequeña pelada o 1 taza de piña o sandía en porción medida (excluye guineo maduro y cítricos por K)';
-      }
-      parts.push(`• Fruta salvadoreña (${fruitCount} int.): ${fruitDesc}`);
-    }
-
-    // Almidones (cereales, tortillas, plátano, frijoles)
-    const almidonCount = parseFloat(String((eqMap.almidones || [])[mIdx] || '0').replace(',', '.'));
-    if (almidonCount > 0) {
-      const almFn = catalog.almidones[mk] || catalog.almidones.des;
-      let almText = typeof almFn === 'function' ? almFn(almidonCount) : `${almidonCount} porciones de almidón típico`;
-      if (isLowK && almText.includes('plátano')) {
-        almText += ' (Aviso RIISS: plátano cocido con doble hervor previo)';
-      }
-      parts.push(`• Almidón base (${almidonCount} int.): ${almText}`);
-    }
-
-    // Proteínas Magras
-    const protMagraCount = parseFloat(String((eqMap.prot_magra || [])[mIdx] || '0').replace(',', '.'));
-    if (protMagraCount > 0) {
-      const pmFn = catalog.prot_magra[mk] || catalog.prot_magra.alm;
-      const pmText = typeof pmFn === 'function' ? pmFn(protMagraCount) : `${protMagraCount} oz de proteína magra`;
-      parts.push(`• Proteína magra (${protMagraCount} int.): ${pmText}`);
-    }
-
-    // Proteínas Semimagras
-    const protSmCount = parseFloat(String((eqMap.prot_sm || [])[mIdx] || '0').replace(',', '.'));
-    if (protSmCount > 0) {
-      const psmFn = catalog.prot_sm[mk] || catalog.prot_sm.des;
-      const psmText = typeof psmFn === 'function' ? psmFn(protSmCount) : `${protSmCount} oz de proteína semimagra`;
-      parts.push(`• Proteína semimagra (${protSmCount} int.): ${psmText}`);
-    }
-
-    // Proteínas Altas en Grasa (se adaptan si hay dieta baja en grasa)
-    const protGrasaCount = parseFloat(String((eqMap.prot_grasa || [])[mIdx] || '0').replace(',', '.'));
-    if (protGrasaCount > 0) {
-      if (isLowFat) {
-        parts.push(`• Proteína sustituta (${protGrasaCount} int.): ${protGrasaCount} oz de quesillo desgrasado o queso fresco tierno (Adaptación RIISS: excluye queso duro o chicharrón graso)`);
-      } else {
-        parts.push(`• Proteína tradicional (${protGrasaCount} int.): ${protGrasaCount} oz de queso fresco artesanal o 1 Cda de mantequilla de maní`);
-      }
-    }
-
-    // Grasas Saludables
-    const grasaCount = parseFloat(String((eqMap.grasas || [])[mIdx] || '0').replace(',', '.'));
-    if (grasaCount > 0) {
-      const grFn = catalog.grasas[mk] || catalog.grasas.alm;
-      let grText = typeof grFn === 'function' ? grFn(grasaCount) : `${grasaCount} grasa(s)`;
-      if (isLowK && grText.includes('aguacate')) {
-        grText = `${grasaCount} cdta(s) de aceite vegetal o de oliva para cocción (Aviso RIISS: aguacate restringido por potasio)`;
-      }
-      parts.push(`• Grasa cardiosaludable (${grasaCount} int.): ${grText}`);
-    }
-
-    // Otros Carbohidratos (Azúcares)
-    const otrosChoCount = parseFloat(String((eqMap.otros_cho || [])[mIdx] || '0').replace(',', '.'));
-    if (otrosChoCount > 0) {
-      parts.push(`• Azúcares permitidos (${otrosChoCount} int.): ${otrosChoCount} Cda de miel natural o ½ taza de gelatina regular`);
-    }
-
-    result[mk] = parts.length > 0 ? parts.join('\n') : '';
+    result[mt.k] = lines.join('\n');
   });
 
   return result;

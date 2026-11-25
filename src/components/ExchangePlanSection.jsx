@@ -1,13 +1,15 @@
 import React, { useState, useMemo } from 'react';
 import {
-  Calculator, Utensils, BookOpen, Sparkles, RefreshCw, Check, Search, ChevronDown, ChevronUp, ArrowRight, ShieldCheck, DollarSign, AlertCircle, Clock, Pill as PillIcon
+  Calculator, Utensils, BookOpen, Sparkles, RefreshCw, Check, Search, ChevronDown, ChevronUp, ArrowRight, ShieldCheck, DollarSign, AlertCircle, Clock, Pill as PillIcon, Calendar, Download, ShoppingCart, Shuffle, FileText, CheckCircle2, ListOrdered, X
 } from 'lucide-react';
 import {
   EXCHANGE_GROUPS, MEAL_TIMES, FOOD_EXCHANGE_CATALOG, generateMealMenuFromExchanges
 } from '../data/exchangeDatabase.js';
 import {
-  COST_LEVELS, generateSalvadoranMenu, getRiissAdaptationNotes
+  COST_LEVELS, generateSalvadoranMenu, getRiissAdaptationNotes, generate7DaySalvadoranMenu, calculateWeeklyGroceryList, getQuickSubstitutionGuide
 } from '../data/salvadoranMenuEngine.js';
+import { SALVADORAN_DISHES, DAYS_OF_WEEK } from '../data/salvadoranDishes.js';
+import { downloadSalvadoranMenuDocx } from '../lib/salvadoranDocxExport.js';
 import RissDietCard from './RissDietCard.jsx';
 
 const num = v => {
@@ -59,6 +61,15 @@ export default function ExchangePlanSection({ p, c, set, upd, Pill }) {
   const [showCatalog, setShowCatalog] = useState(false);
   const [catalogSearch, setCatalogSearch] = useState('');
   const [activeCatalogGroup, setActiveCatalogGroup] = useState('all');
+
+  // Estado del Planificador Semanal de 7 Días y Exportación
+  const [menuViewMode, setMenuViewMode] = useState('weekly'); // 'weekly' | 'single'
+  const [selectedDayKey, setSelectedDayKey] = useState('lunes');
+  const [swapModal, setSwapModal] = useState(null); // { dayKey, mealKey, currentDishId }
+  const [isExportingDocx, setIsExportingDocx] = useState(false);
+  const [showGroceryList, setShowGroceryList] = useState(false);
+  const [showSubGuide, setShowSubGuide] = useState(false);
+  const [customOverrides, setCustomOverrides] = useState(p.plan?.weeklyOverrides || {});
 
   const snackConfig = p.plan?.snackConfig || 'both';
 
@@ -355,6 +366,27 @@ export default function ExchangePlanSection({ p, c, set, upd, Pill }) {
     });
   }, [p.plan.eq, costLevel, rissData, variantIdx, snackConfig]);
 
+  // Plan Semanal Completo de 7 Días (Lunes a Domingo)
+  const weeklyPlan = useMemo(() => {
+    return generate7DaySalvadoranMenu({
+      eqMap: p.plan.eq || {},
+      costLevel,
+      rissData,
+      snackConfig,
+      customOverrides
+    });
+  }, [p.plan.eq, costLevel, rissData, snackConfig, customOverrides]);
+
+  // Lista de compras consolidada semanal
+  const groceryList = useMemo(() => {
+    return calculateWeeklyGroceryList(weeklyPlan);
+  }, [weeklyPlan]);
+
+  // Guía práctica de sustitución en casa
+  const subGuide = useMemo(() => {
+    return getQuickSubstitutionGuide();
+  }, []);
+
   // Acción 1: Calcular intercambios automáticamente para cuadrar metas (95-105%)
   const handleAutoCalculateExchanges = () => {
     if (!m || !vctMeta) return;
@@ -493,6 +525,75 @@ export default function ExchangePlanSection({ p, c, set, upd, Pill }) {
         }
       }
     }));
+  };
+
+  // Copiar el día seleccionado del plan semanal al menú del paciente
+  const handleApplyDayToPatient = (dayKey = selectedDayKey) => {
+    const day = weeklyPlan[dayKey];
+    if (!day) return;
+    const dayMenuMap = {};
+    MEAL_TIMES.forEach(mt => {
+      const m = day.meals[mt.k];
+      if (m) {
+        const lines = [
+          `🍲 ${m.dishName}`,
+          m.description ? `  ${m.description}` : '',
+          `  • Ingredientes medidos:`,
+          ...m.ingredients.map(ing => `    - ${ing.name}: ${ing.measure}`),
+          m.prepNotes ? `  • Preparación: ${m.prepNotes}` : '',
+          m.clinicalNotes ? `  • Aviso clínico: ${m.clinicalNotes}` : ''
+        ].filter(Boolean);
+        dayMenuMap[mt.k] = lines.join('\n');
+      }
+    });
+
+    upd(x => ({
+      ...x,
+      plan: {
+        ...x.plan,
+        menu: {
+          ...x.plan.menu,
+          ...dayMenuMap
+        }
+      }
+    }));
+  };
+
+  const handleExportGoogleDocs = async () => {
+    try {
+      setIsExportingDocx(true);
+      await downloadSalvadoranMenuDocx(p, c, weeklyPlan);
+    } catch (err) {
+      console.error('Error al exportar a Google Docs:', err);
+      alert('Hubo un error al generar el archivo Word/Google Docs. Verifique los datos ingresados.');
+    } finally {
+      setIsExportingDocx(false);
+    }
+  };
+
+  const handleSwapDish = (dayKey, mealKey, newDishId) => {
+    const updated = { ...customOverrides, [`${dayKey}_${mealKey}`]: newDishId };
+    setCustomOverrides(updated);
+    upd(x => ({
+      ...x,
+      plan: {
+        ...x.plan,
+        weeklyOverrides: updated
+      }
+    }));
+    setSwapModal(null);
+  };
+
+  const handleRegenerateWeeklyPlan = () => {
+    setCustomOverrides({});
+    upd(x => ({
+      ...x,
+      plan: {
+        ...x.plan,
+        weeklyOverrides: {}
+      }
+    }));
+    setVariantIdx(v => v + 1);
   };
 
   const handleClearAll = () => {
@@ -1092,55 +1193,92 @@ export default function ExchangePlanSection({ p, c, set, upd, Pill }) {
         </div>
       </section>
 
-      {/* 3. SUGERENCIAS DE MENÚ EN 5 TIEMPOS CON PLATOS TÍPICOS SALVADOREÑOS Y NIVELES DE COSTO */}
+      {/* 3. PLANIFICADOR DE MENÚ: PLATOS TÍPICOS SALVADOREÑOS Y GENERADOR DE 7 DÍAS */}
       <section className="card p-5">
         <div className="flex flex-wrap items-start justify-between gap-3 mb-4 pb-3 border-b border-line">
           <div>
             <div className="flex items-center gap-2">
               <Utensils className="w-5 h-5 text-brand" />
-              <h2 className="h2 mb-0">3. Menú {snackConfig === 'both' ? 'en 5 Tiempos' : snackConfig === 'none' ? 'en 3 Tiempos' : 'en 4 Tiempos'}: Platos Típicos Salvadoreños Adaptados (RIISS 2014)</h2>
+              <h2 className="h2 mb-0">3. Menú Salvadoreño: {menuViewMode === 'weekly' ? 'Plan Semanal de 7 Días (Lunes a Domingo)' : `Menú Diario (${snackConfig === 'both' ? '5 Tiempos' : snackConfig === 'none' ? '3 Tiempos' : '4 Tiempos'})`}</h2>
             </div>
             <p className="hint mt-1">
-              Platos salvadoreños tradicionales (desayuno con frijoles de la olla, tortillas de comal, plátano salcochado, pupusas saludables, pollo entomatado, guisados con güisquil/pipián) adaptados estrictamente a la dieta hospitalaria RIISS y al número exacto de intercambios por tiempo.
+              Platos típicos salvadoreños adaptados estrictamente a la prescripción RIISS 2014, cuadro de intercambios con medidas caseras exactas y rotación balanceada de fuentes de proteína.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            {/* Toggle de Modalidad: Plan Semanal vs Menú Diario */}
+            <div className="inline-flex rounded-lg shadow-2xs border border-line p-0.5 bg-surface">
+              <button
+                type="button"
+                className={`px-3 py-1.5 text-xs font-bold rounded-md transition ${
+                  menuViewMode === 'weekly' ? 'bg-brand text-white shadow-xs' : 'text-ink hover:bg-surface-alt'
+                }`}
+                onClick={() => setMenuViewMode('weekly')}
+              >
+                <Calendar className="w-3.5 h-3.5 inline mr-1" /> Plan 7 Días
+              </button>
+              <button
+                type="button"
+                className={`px-3 py-1.5 text-xs font-bold rounded-md transition ${
+                  menuViewMode === 'single' ? 'bg-brand text-white shadow-xs' : 'text-ink hover:bg-surface-alt'
+                }`}
+                onClick={() => setMenuViewMode('single')}
+              >
+                <FileText className="w-3.5 h-3.5 inline mr-1" /> Menú Base Único
+              </button>
+            </div>
+
+            {/* Botón de Exportación a Google Docs (.docx) */}
             <button
               type="button"
-              className="btn btn-primary btn-sm"
-              onClick={handleApplySuggestedMenuToPatient}
-              title="Copia automáticamente todas las sugerencias salvadoreñas de este nivel de costo al menú final del reporte"
+              className="btn btn-primary btn-sm shadow-xs flex items-center gap-1.5"
+              onClick={handleExportGoogleDocs}
+              disabled={isExportingDocx}
+              title="Descargar documento .docx completamente editable y compatible con Google Docs"
             >
-              <Check className="w-3.5 h-3.5" /> Aplicar sugerencias al menú del reporte
+              <Download className={`w-4 h-4 ${isExportingDocx ? 'animate-spin' : ''}`} />
+              {isExportingDocx ? 'Generando documento...' : 'Exportar Menú de 7 Días a Google Docs'}
             </button>
           </div>
         </div>
 
-        {/* 1. Selector de Nivel de Costo (Económico, Regular, Más Costoso) */}
+        {/* 1. Selector de Nivel de Costo (Económico, Regular, Más Costoso) y Regenerar */}
         <div className="mb-4 p-3.5 bg-surface-alt rounded-lg border border-line">
           <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
             <div className="flex items-center gap-2">
               <DollarSign className="w-4 h-4 text-brand" />
               <span className="text-xs font-bold text-ink uppercase tracking-wider">Nivel de Costo del Menú:</span>
             </div>
-            <div className="inline-flex rounded-lg shadow-2xs">
-              {COST_LEVELS.map(lvl => {
-                const isActive = costLevel === lvl.id;
-                return (
-                  <button
-                    key={lvl.id}
-                    type="button"
-                    className={`px-3 py-1.5 text-xs font-bold transition-all border first:rounded-l-lg last:rounded-r-lg ${
-                      isActive
-                        ? 'bg-brand text-white border-brand shadow-xs'
-                        : 'bg-surface hover:bg-surface-alt border-line text-ink'
-                    }`}
-                    onClick={() => handleSetCostLevel(lvl.id)}
-                  >
-                    {lvl.badge}
-                  </button>
-                );
-              })}
+            <div className="flex items-center gap-3">
+              <div className="inline-flex rounded-lg shadow-2xs">
+                {COST_LEVELS.map(lvl => {
+                  const isActive = costLevel === lvl.id;
+                  return (
+                    <button
+                      key={lvl.id}
+                      type="button"
+                      className={`px-3 py-1.5 text-xs font-bold transition-all border first:rounded-l-lg last:rounded-r-lg ${
+                        isActive
+                          ? 'bg-brand text-white border-brand shadow-xs'
+                          : 'bg-surface hover:bg-surface-alt border-line text-ink'
+                      }`}
+                      onClick={() => handleSetCostLevel(lvl.id)}
+                    >
+                      {lvl.badge}
+                    </button>
+                  );
+                })}
+              </div>
+              {menuViewMode === 'weekly' && (
+                <button
+                  type="button"
+                  className="btn btn-xs btn-outline flex items-center gap-1 text-xs"
+                  onClick={handleRegenerateWeeklyPlan}
+                  title="Genera una nueva combinación semanal rotando las fuentes de proteína"
+                >
+                  <RefreshCw className="w-3 h-3" /> Regenerar Semana
+                </button>
+              )}
             </div>
           </div>
           <p className="text-xs text-muted mb-0">
@@ -1160,118 +1298,450 @@ export default function ExchangePlanSection({ p, c, set, upd, Pill }) {
           </ul>
         </div>
 
-        {/* 3. Selector de Variedad Rotativa */}
-        <div className="mb-4 p-2.5 bg-sunken rounded-lg border border-line flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-ink">Rotación de Preparaciones:</span>
-            <div className="inline-flex rounded-md shadow-2xs">
-              {[
-                { idx: 0, label: 'Opción A (Casera Tradicional)' },
-                { idx: 1, label: 'Opción B (Rotación de Proteínas)' },
-                { idx: 2, label: 'Opción C (Vegetales Criollos & Horno)' }
-              ].map(v => (
-                <button
-                  key={v.idx}
-                  type="button"
-                  className={`px-2.5 py-1 text-xs font-medium transition-all border first:rounded-l-md last:rounded-r-md ${
-                    (variantIdx % 3) === v.idx
-                      ? 'bg-brand text-white border-brand'
-                      : 'bg-surface hover:bg-surface-alt border-line text-ink'
-                  }`}
-                  onClick={() => setVariantIdx(v.idx)}
-                >
-                  {v.label}
-                </button>
-              ))}
+        {/* ============================================================== */}
+        {/* VISTA A: PLANIFICADOR SEMANAL DE 7 DÍAS (LUNES A DOMINGO)       */}
+        {/* ============================================================== */}
+        {menuViewMode === 'weekly' ? (
+          <div>
+            {/* Barra de Navegación por Días de la Semana */}
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-2 p-2 bg-sunken rounded-xl border border-line">
+              <div className="flex items-center gap-1.5 overflow-x-auto py-1">
+                {DAYS_OF_WEEK.map((d) => {
+                  const isSelected = selectedDayKey === d.key;
+                  return (
+                    <button
+                      key={d.key}
+                      type="button"
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap ${
+                        isSelected
+                          ? 'bg-brand text-white shadow-xs'
+                          : 'bg-surface hover:bg-surface-alt border border-line text-ink'
+                      }`}
+                      onClick={() => setSelectedDayKey(d.key)}
+                    >
+                      <Calendar className="w-3.5 h-3.5" />
+                      <span>{d.name}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <button
+                type="button"
+                className="btn btn-xs btn-primary shadow-2xs whitespace-nowrap"
+                onClick={() => handleApplyDayToPatient(selectedDayKey)}
+                title="Copia las preparaciones del día seleccionado al menú del reporte"
+              >
+                <Check className="w-3 h-3" /> Aplicar {DAYS_OF_WEEK.find(d => d.key === selectedDayKey)?.name} al reporte
+              </button>
             </div>
-          </div>
-          <button
-            type="button"
-            className="btn btn-sm btn-ghost text-xs text-brand flex items-center gap-1"
-            onClick={() => setVariantIdx(v => v + 1)}
-            title="Alternar a la siguiente combinación típica"
-          >
-            <RefreshCw className="w-3 h-3" /> Rotar plato
-          </button>
-        </div>
 
-        {/* Tarjetas de sugerencia en vivo + edición para los tiempos activos */}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {distCalc.mealTotals.filter(mt => isMealActive(mt.k)).map((mt) => {
-            const sugText = suggestedMenus[mt.k];
-            const currentMenu = (p.plan.menu && p.plan.menu[mt.k]) || '';
-            const mealMeds = (Array.isArray(p.gen?.medList) ? p.gen.medList : []).filter(
-              m => Array.isArray(m.tiemposComida) && m.tiemposComida.includes(mt.k)
-            );
+            {/* Tarjetas de los Tiempos de Comida del Día Seleccionado */}
+            {(() => {
+              const currentDayData = weeklyPlan[selectedDayKey] || { meals: {} };
+              return (
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 mb-6">
+                  {distCalc.mealTotals.filter(mt => isMealActive(mt.k)).map((mt) => {
+                    const meal = currentDayData.meals[mt.k];
+                    const mealMeds = (Array.isArray(p.gen?.medList) ? p.gen.medList : []).filter(
+                      m => Array.isArray(m.tiemposComida) && m.tiemposComida.includes(mt.k)
+                    );
 
-            return (
-              <div key={mt.k} className="rounded-lg border border-line p-4 flex flex-col justify-between bg-surface">
-                <div>
-                  <div className="flex items-center justify-between gap-2 pb-2 mb-2 border-b border-line">
-                    <span className="font-semibold text-sm text-brand">{mt.n}</span>
-                    <span className="num text-xs text-muted">
-                      {f0(mt.kcal)} kcal ({f1(mt.pctVct)}%)
-                    </span>
-                  </div>
+                    if (!meal) {
+                      return (
+                        <div key={mt.k} className="rounded-xl border border-line p-4 bg-surface text-center text-xs text-muted">
+                          Sin intercambios asignados en {mt.n}.
+                        </div>
+                      );
+                    }
 
-                  {/* Fármacos / suplementos programados en este tiempo */}
-                  {mealMeds.length > 0 && (
-                    <div className="mb-2.5 p-2 rounded bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 text-xs">
-                      <div className="flex items-center gap-1 font-semibold text-amber-800 dark:text-amber-300 text-[11px] mb-1">
-                        <Clock className="w-3 h-3" /> Fármacos en {mt.n}:
-                      </div>
-                      <div className="space-y-0.5">
-                        {mealMeds.map(med => (
-                          <div key={med.id || med.nombre} className="text-[11px] text-ink flex items-center justify-between">
-                            <span>• <strong>{med.nombre}</strong> {med.dosisFrecuencia ? `(${med.dosisFrecuencia})` : ''}</span>
-                            <span className="text-[10px] text-muted italic">
-                              {med.relacionComidas === 'con_comidas' ? 'Con comida' : med.relacionComidas === 'en_ayunas' ? 'En ayunas' : ''}
+                    return (
+                      <div key={mt.k} className="rounded-xl border border-line p-4 flex flex-col justify-between bg-surface shadow-2xs">
+                        <div>
+                          {/* Cabecera del Tiempo */}
+                          <div className="flex items-center justify-between gap-2 pb-2 mb-2.5 border-b border-line">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-bold text-sm text-brand">{mt.n}</span>
+                              {meal.proteinType && (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface-alt border border-line text-muted uppercase font-medium">
+                                  {meal.proteinType.replace('_', ' ')}
+                                </span>
+                              )}
+                            </div>
+                            <span className="num text-xs font-semibold text-ink">
+                              {f0(meal.totals?.kcal || mt.kcal)} kcal ({f1(mt.pctVct)}%)
                             </span>
                           </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
 
-                  {/* Resumen de intercambios del tiempo */}
-                  <div className="mb-3">
-                    <div className="eyebrow text-[10px] mb-1">Sugerencia según intercambios asignados:</div>
-                    {sugText ? (
-                      <div className="p-2.5 rounded bg-sunken text-xs whitespace-pre-line leading-relaxed border border-line">
-                        {sugText}
+                          {/* Fármacos en este tiempo */}
+                          {mealMeds.length > 0 && (
+                            <div className="mb-2.5 p-2 rounded bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 text-xs">
+                              <div className="flex items-center gap-1 font-semibold text-amber-800 dark:text-amber-300 text-[11px] mb-1">
+                                <Clock className="w-3 h-3" /> Fármacos en {mt.n}:
+                              </div>
+                              <div className="space-y-0.5">
+                                {mealMeds.map(med => (
+                                  <div key={med.id || med.nombre} className="text-[11px] text-ink flex items-center justify-between">
+                                    <span>• <strong>{med.nombre}</strong> {med.dosisFrecuencia ? `(${med.dosisFrecuencia})` : ''}</span>
+                                    <span className="text-[10px] text-muted italic">
+                                      {med.relacionComidas === 'con_comidas' ? 'Con comida' : med.relacionComidas === 'en_ayunas' ? 'En ayunas' : ''}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Platillo Típico Asignado y Botón Intercambiar */}
+                          <div className="mb-2.5 p-2.5 rounded-lg bg-brand-soft/20 border border-brand/20">
+                            <div className="flex items-start justify-between gap-2">
+                              <div>
+                                <div className="font-bold text-xs text-brand-dark dark:text-brand flex items-center gap-1">
+                                  🍲 {meal.dishName}
+                                </div>
+                                {meal.description && (
+                                  <p className="text-[11px] text-muted mt-0.5 leading-snug">
+                                    {meal.description}
+                                  </p>
+                                )}
+                              </div>
+                              <button
+                                type="button"
+                                className="btn btn-2xs btn-outline shrink-0 text-brand border-brand/30 hover:bg-brand-soft flex items-center gap-1"
+                                onClick={() => setSwapModal({
+                                  dayKey: selectedDayKey,
+                                  mealKey: mt.k,
+                                  currentDishId: meal.dishId
+                                })}
+                                title="Cambiar por otro platillo salvadoreño equivalente"
+                              >
+                                <Shuffle className="w-3 h-3" /> Intercambiar
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Lista de Ingredientes con Medidas Caseras Exactas */}
+                          <div className="mb-3 space-y-1">
+                            <div className="text-[10px] uppercase font-bold text-muted tracking-wider">
+                              Ingredientes y medidas caseras:
+                            </div>
+                            <div className="p-2 rounded bg-sunken text-xs space-y-1 border border-line">
+                              {meal.ingredients.map((ing, iIdx) => (
+                                <div key={iIdx} className="flex items-start justify-between gap-1 leading-snug text-ink text-[11px]">
+                                  <span>• {ing.name}</span>
+                                  <span className="font-semibold text-brand shrink-0">{ing.measure}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Notas de Preparación y Clínicas */}
+                          {meal.prepNotes && (
+                            <div className="text-[11px] text-muted italic mb-2 leading-relaxed">
+                              <span className="font-semibold text-ink not-italic">Cocción: </span>
+                              {meal.prepNotes}
+                            </div>
+                          )}
+                          {meal.clinicalNotes && (
+                            <div className="p-1.5 rounded bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-800 dark:text-amber-400 mb-2">
+                              ⚠️ {meal.clinicalNotes}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Totales de Macros del Tiempo de Comida */}
+                        <div className="pt-2 border-t border-line flex items-center justify-between text-[11px] text-muted">
+                          <span>CHO: <strong>{f0(meal.totals?.cho)}g</strong></span>
+                          <span>PROT: <strong>{f0(meal.totals?.p)}g</strong></span>
+                          <span>LIP: <strong>{f0(meal.totals?.l)}g</strong></span>
+                        </div>
                       </div>
-                    ) : (
-                      <p className="text-xs text-muted italic">
-                        Asigne intercambios en {mt.n} arriba para ver las opciones de alimentos sugeridas.
-                      </p>
-                    )}
-                  </div>
+                    );
+                  })}
                 </div>
+              );
+            })()}
 
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="lbl mb-0">Menú final para el paciente ({mt.n})</span>
-                    {sugText && currentMenu !== sugText && (
-                      <button
-                        className="text-[11px] text-brand hover:underline"
-                        onClick={() => set('plan.menu.' + mt.k, sugText)}
-                      >
-                        Usar sugerencia
-                      </button>
-                    )}
+            {/* Paneles de Apoyo: Lista de Compras y Guía de Sustitución */}
+            <div className="grid gap-4 md:grid-cols-2 pt-3 border-t border-line">
+              {/* Acordeón: Lista de Compras Semanal */}
+              <div className="border border-line rounded-xl overflow-hidden bg-surface">
+                <button
+                  type="button"
+                  className="w-full p-3 bg-surface-alt flex items-center justify-between gap-2 text-left hover:bg-sunken transition"
+                  onClick={() => setShowGroceryList(!showGroceryList)}
+                >
+                  <div className="flex items-center gap-2">
+                    <ShoppingCart className="w-4 h-4 text-brand" />
+                    <span className="text-xs font-bold text-ink">Lista de Compras Semanal (Calculada de los 7 Días)</span>
                   </div>
-                  <textarea
-                    className="inp text-xs"
-                    rows={4}
-                    placeholder={`Escriba o aplique la sugerencia para ${mt.n}...`}
-                    value={currentMenu}
-                    onChange={e => set('plan.menu.' + mt.k, e.target.value)}
-                  />
+                  {showGroceryList ? <ChevronUp className="w-4 h-4 text-muted" /> : <ChevronDown className="w-4 h-4 text-muted" />}
+                </button>
+
+                {showGroceryList && (
+                  <div className="p-3.5 space-y-3 max-h-80 overflow-y-auto text-xs">
+                    {Object.values(groceryList).map((cat, cIdx) => (
+                      <div key={cIdx} className="space-y-1">
+                        <div className="font-bold text-[11px] uppercase tracking-wide text-brand">
+                          {cat.title}
+                        </div>
+                        <div className="space-y-0.5 pl-2 border-l-2 border-brand/20">
+                          {cat.items.map((it, itIdx) => (
+                            <div key={itIdx} className="flex items-center justify-between text-ink text-[11px]">
+                              <span>• {it.name}</span>
+                              <span className="text-muted text-[10px] italic">{it.summary}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Acordeón: Guía de Sustitución Rápida */}
+              <div className="border border-line rounded-xl overflow-hidden bg-surface">
+                <button
+                  type="button"
+                  className="w-full p-3 bg-surface-alt flex items-center justify-between gap-2 text-left hover:bg-sunken transition"
+                  onClick={() => setShowSubGuide(!showSubGuide)}
+                >
+                  <div className="flex items-center gap-2">
+                    <BookOpen className="w-4 h-4 text-brand" />
+                    <span className="text-xs font-bold text-ink">Guía de Sustitución Rápida para el Paciente</span>
+                  </div>
+                  {showSubGuide ? <ChevronUp className="w-4 h-4 text-muted" /> : <ChevronDown className="w-4 h-4 text-muted" />}
+                </button>
+
+                {showSubGuide && (
+                  <div className="p-3.5 space-y-2.5 max-h-80 overflow-y-auto text-xs">
+                    {subGuide.map((g, gIdx) => (
+                      <div key={gIdx} className="p-2 rounded bg-sunken border border-line">
+                        <div className="font-bold text-[11px] text-brand">{g.group}</div>
+                        <div className="text-[11px] text-ink mt-0.5 leading-relaxed">{g.examples}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        ) : (
+          /* ============================================================== */
+          /* VISTA B: MENÚ BASE ÚNICO (VISTA TRADICIONAL CON EDICIÓN LIBRE) */
+          /* ============================================================== */
+          <div>
+            <div className="mb-4 p-2.5 bg-sunken rounded-lg border border-line flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-ink">Rotación de Preparaciones:</span>
+                <div className="inline-flex rounded-md shadow-2xs">
+                  {[
+                    { idx: 0, label: 'Opción A (Casera Tradicional)' },
+                    { idx: 1, label: 'Opción B (Rotación de Proteínas)' },
+                    { idx: 2, label: 'Opción C (Vegetales Criollos & Horno)' }
+                  ].map(v => (
+                    <button
+                      key={v.idx}
+                      type="button"
+                      className={`px-2.5 py-1 text-xs font-medium transition-all border first:rounded-l-md last:rounded-r-md ${
+                        (variantIdx % 3) === v.idx
+                          ? 'bg-brand text-white border-brand'
+                          : 'bg-surface hover:bg-surface-alt border-line text-ink'
+                      }`}
+                      onClick={() => setVariantIdx(v.idx)}
+                    >
+                      {v.label}
+                    </button>
+                  ))}
                 </div>
               </div>
-            );
-          })}
-        </div>
+              <button
+                type="button"
+                className="btn btn-sm btn-ghost text-xs text-brand flex items-center gap-1"
+                onClick={() => setVariantIdx(v => v + 1)}
+                title="Alternar a la siguiente combinación típica"
+              >
+                <RefreshCw className="w-3 h-3" /> Rotar plato
+              </button>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {distCalc.mealTotals.filter(mt => isMealActive(mt.k)).map((mt) => {
+                const sugText = suggestedMenus[mt.k];
+                const currentMenu = (p.plan.menu && p.plan.menu[mt.k]) || '';
+                const mealMeds = (Array.isArray(p.gen?.medList) ? p.gen.medList : []).filter(
+                  m => Array.isArray(m.tiemposComida) && m.tiemposComida.includes(mt.k)
+                );
+
+                return (
+                  <div key={mt.k} className="rounded-lg border border-line p-4 flex flex-col justify-between bg-surface">
+                    <div>
+                      <div className="flex items-center justify-between gap-2 pb-2 mb-2 border-b border-line">
+                        <span className="font-semibold text-sm text-brand">{mt.n}</span>
+                        <span className="num text-xs text-muted">
+                          {f0(mt.kcal)} kcal ({f1(mt.pctVct)}%)
+                        </span>
+                      </div>
+
+                      {mealMeds.length > 0 && (
+                        <div className="mb-2.5 p-2 rounded bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 text-xs">
+                          <div className="flex items-center gap-1 font-semibold text-amber-800 dark:text-amber-300 text-[11px] mb-1">
+                            <Clock className="w-3 h-3" /> Fármacos en {mt.n}:
+                          </div>
+                          <div className="space-y-0.5">
+                            {mealMeds.map(med => (
+                              <div key={med.id || med.nombre} className="text-[11px] text-ink flex items-center justify-between">
+                                <span>• <strong>{med.nombre}</strong> {med.dosisFrecuencia ? `(${med.dosisFrecuencia})` : ''}</span>
+                                <span className="text-[10px] text-muted italic">
+                                  {med.relacionComidas === 'con_comidas' ? 'Con comida' : med.relacionComidas === 'en_ayunas' ? 'En ayunas' : ''}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="mb-3">
+                        <div className="eyebrow text-[10px] mb-1">Sugerencia según intercambios asignados:</div>
+                        {sugText ? (
+                          <div className="p-2.5 rounded bg-sunken text-xs whitespace-pre-line leading-relaxed border border-line">
+                            {sugText}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-muted italic">
+                            Asigne intercambios en {mt.n} arriba para ver las opciones de alimentos sugeridas.
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="lbl mb-0">Menú final para el paciente ({mt.n})</span>
+                        {sugText && currentMenu !== sugText && (
+                          <button
+                            className="text-[11px] text-brand hover:underline"
+                            onClick={() => set('plan.menu.' + mt.k, sugText)}
+                          >
+                            Usar sugerencia
+                          </button>
+                        )}
+                      </div>
+                      <textarea
+                        className="inp text-xs"
+                        rows={4}
+                        placeholder={`Escriba o aplique la sugerencia para ${mt.n}...`}
+                        value={currentMenu}
+                        onChange={e => set('plan.menu.' + mt.k, e.target.value)}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ============================================================== */}
+        {/* MODAL / DIÁLOGO DE INTERCAMBIO RÁPIDO DE PLATILLO SALVADOREÑO   */}
+        {/* ============================================================== */}
+        {swapModal && (
+          <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="bg-surface border border-line rounded-2xl shadow-xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden">
+              <div className="p-4 bg-surface-alt border-b border-line flex items-center justify-between">
+                <div>
+                  <h3 className="h3 mb-0 text-brand">Intercambiar Platillo Salvadoreño</h3>
+                  <p className="text-xs text-muted mt-0.5">
+                    Seleccione una opción típica compatible para <strong>{MEAL_TIMES.find(m => m.k === swapModal.mealKey)?.n}</strong> del día <strong>{DAYS_OF_WEEK.find(d => d.key === swapModal.dayKey)?.name}</strong>:
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-ghost p-1"
+                  onClick={() => setSwapModal(null)}
+                >
+                  <X className="w-5 h-5 text-muted hover:text-ink" />
+                </button>
+              </div>
+
+              <div className="p-4 overflow-y-auto space-y-3">
+                {(() => {
+                  const targetMealType = swapModal.mealKey === 'c1' || swapModal.mealKey === 'c2' ? 'snack' : swapModal.mealKey;
+                  const availableDishes = SALVADORAN_DISHES.filter(d => d.mealType === targetMealType);
+
+                  if (availableDishes.length === 0) {
+                    return (
+                      <p className="text-xs text-muted text-center py-6">
+                        No hay platillos específicos registrados para este tiempo.
+                      </p>
+                    );
+                  }
+
+                  return availableDishes.map((dish) => {
+                    const isCurrent = dish.id === swapModal.currentDishId;
+                    return (
+                      <div
+                        key={dish.id}
+                        className={`p-3.5 rounded-xl border transition-all ${
+                          isCurrent
+                            ? 'border-brand bg-brand-soft/20 ring-1 ring-brand'
+                            : 'border-line bg-surface hover:bg-surface-alt'
+                        }`}
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-2 mb-1.5">
+                          <div>
+                            <div className="font-bold text-sm text-ink flex items-center gap-1.5">
+                              <span>🍲 {dish.name}</span>
+                              {dish.costLevel && (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface border border-line text-muted">
+                                  {dish.costLevel}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-xs text-muted mt-0.5 leading-snug">
+                              {dish.description}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            className={`btn btn-xs ${isCurrent ? 'btn-outline border-brand text-brand' : 'btn-primary'}`}
+                            onClick={() => handleSwapDish(swapModal.dayKey, swapModal.mealKey, dish.id)}
+                            disabled={isCurrent}
+                          >
+                            {isCurrent ? 'Platillo actual' : 'Seleccionar este platillo'}
+                          </button>
+                        </div>
+
+                        {/* Preparación y notas clínicas */}
+                        {dish.prepNotes && (
+                          <div className="text-[11px] text-muted italic mt-1">
+                            <span className="font-semibold text-ink not-italic">Preparación: </span>
+                            {dish.prepNotes}
+                          </div>
+                        )}
+                        {dish.renalNote && (
+                          <div className="text-[11px] text-amber-700 dark:text-amber-400 mt-1">
+                            ⚠️ {dish.renalNote}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+
+              <div className="p-3 bg-surface-alt border-t border-line flex justify-end">
+                <button
+                  type="button"
+                  className="btn btn-sm btn-ghost text-xs"
+                  onClick={() => setSwapModal(null)}
+                >
+                  Cerrar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </section>
 
       {/* 4. BUSCADOR Y CATÁLOGO OFICIAL DE LISTAS DE INTERCAMBIO DEL DOCUMENTO PDF */}
