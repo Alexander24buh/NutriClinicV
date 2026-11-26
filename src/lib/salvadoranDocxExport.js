@@ -1,7 +1,7 @@
 // Generador y Exportador de Menús de 7 Días a Google Docs (.docx)
-// Diseñado para compatibilidad nativa con Google Docs y Microsoft Word
-// Incluye Encabezado Clínico, Tabla de Intercambios, Menú Semanal con Medidas Caseras,
-// Guía de Sustitución Rápida y Lista de Compras Semanal Consolidada.
+// Formato idéntico al documento clínico oficial del Hospital Nacional "San Juan de Dios" San Miguel / El Salvador
+// Formato Horizontal (Landscape), Tabla de 8 Columnas (Tiempo de comida | Menú 1 - Menú 7),
+// 5 Recomendaciones Clínicas y Sello/Firma Profesional (J.V.P.M. 1040).
 
 import {
   Document,
@@ -14,43 +14,33 @@ import {
   WidthType,
   AlignmentType,
   BorderStyle,
-  HeadingLevel,
-  HeightRule
+  PageOrientation
 } from 'docx';
-import { MEAL_TIMES, EXCHANGE_GROUPS } from '../data/exchangeDatabase.js';
-import { DAYS_OF_WEEK } from '../data/salvadoranDishes.js';
-import { calculateWeeklyGroceryList, getQuickSubstitutionGuide } from '../data/salvadoranMenuEngine.js';
+import { MEAL_TIMES } from '../data/exchangeDatabase.js';
+import { DAYS_OF_WEEK, HOSPITAL_MENUS_SAN_MIGUEL, HOSPITAL_GENERAL_RECOMMENDATIONS } from '../data/salvadoranDishes.js';
 
-const BRAND_COLOR = '0D9488'; // Teal médico profesional
-const BRAND_DARK = '115E59';
-const GRAY_BG = 'F8FAFC';
-const GRAY_BORDER = 'E2E8F0';
-const TEXT_MUTED = '64748B';
+const BORDER_BLACK = { style: BorderStyle.SINGLE, size: 8, color: '000000' };
 
-const cellBorder = {
-  top: { style: BorderStyle.SINGLE, size: 1, color: GRAY_BORDER },
-  bottom: { style: BorderStyle.SINGLE, size: 1, color: GRAY_BORDER },
-  left: { style: BorderStyle.SINGLE, size: 1, color: GRAY_BORDER },
-  right: { style: BorderStyle.SINGLE, size: 1, color: GRAY_BORDER }
+const fullTableBorder = {
+  top: BORDER_BLACK,
+  bottom: BORDER_BLACK,
+  left: BORDER_BLACK,
+  right: BORDER_BLACK
 };
 
-const cellMargins = { top: 120, bottom: 120, left: 160, right: 160 };
+const cellMargins = { top: 80, bottom: 80, left: 100, right: 100 };
 
 export async function generateSalvadoranMenuDocx(patient = {}, computed = {}, weeklyPlan = {}) {
   const g = patient.gen || {};
   const pl = patient.plan || {};
   const req = patient.req || {};
-  const riss = pl.riss || {};
 
   const nombre = g.nombre || 'Paciente';
-  const edad = g.edad ? `${g.edad} años` : (g.edadMeses ? `${g.edadMeses} meses` : 'No especificada');
-  const sexo = g.sexo === 'M' ? 'Masculino' : g.sexo === 'F' ? 'Femenino' : '—';
   const expediente = g.expediente || 'S/N';
   const fecha = g.fecha || new Date().toISOString().slice(0, 10);
-  const responsable = g.responsable || 'Lic. en Nutrición Clínica';
-  const dx = g.dx || 'Atención Nutricional Integral';
+  const responsable = g.responsable || 'Licda. Diana Carolina Cortéz Sorto';
+  const jvpm = g.jvpm || 'J.V.P.M. No. 1040';
 
-  // Metas nutricionales
   const vct = computed.get || computed.vctMeta || (req.kcalkg ? Math.round(Number(req.kcalkg) * (computed.wCalc || 60)) : 1800);
   const macros = computed.m || {
     p: { pct: 18, g: Math.round(vct * 0.18 / 4) },
@@ -58,298 +48,331 @@ export async function generateSalvadoranMenuDocx(patient = {}, computed = {}, we
     l: { pct: 28, g: Math.round(vct * 0.28 / 9) }
   };
 
-  // 1. Encabezado Clínico Institucional
-  const headerSection = [
-    new Paragraph({
-      alignment: AlignmentType.RIGHT,
-      spacing: { after: 60 },
-      children: [
-        new TextRun({ text: 'NUTRICLÍNICA / EGONUTRIV · ATENCIÓN NUTRICIONAL', bold: true, size: 18, color: BRAND_DARK })
-      ]
-    }),
-    new Paragraph({
-      alignment: AlignmentType.LEFT,
-      spacing: { after: 120 },
-      children: [
-        new TextRun({ text: 'PLAN DE ALIMENTACIÓN Y MENÚ SALVADOREÑO DE 7 DÍAS', bold: true, size: 30, color: BRAND_COLOR })
-      ]
-    }),
-    new Paragraph({
-      spacing: { after: 180 },
-      children: [
-        new TextRun({ text: 'Paciente: ', bold: true, size: 22 }),
-        new TextRun({ text: `${nombre}    `, size: 22 }),
-        new TextRun({ text: 'Edad: ', bold: true, size: 22 }),
-        new TextRun({ text: `${edad}    `, size: 22 }),
-        new TextRun({ text: 'Sexo: ', bold: true, size: 22 }),
-        new TextRun({ text: `${sexo}    `, size: 22 }),
-        new TextRun({ text: 'Expediente: ', bold: true, size: 22 }),
-        new TextRun({ text: `${expediente}\n`, size: 22 }),
-        new TextRun({ text: 'Diagnóstico / Condición: ', bold: true, size: 20 }),
-        new TextRun({ text: `${dx}    `, size: 20 }),
-        new TextRun({ text: 'Fecha: ', bold: true, size: 20 }),
-        new TextRun({ text: `${fecha}\n`, size: 20 }),
-        new TextRun({ text: 'Prescripción Dietoterapéutica: ', bold: true, size: 20, color: BRAND_DARK }),
-        new TextRun({
-          text: `${vct} kcal/día · Proteínas: ${macros.p.pct}% (${macros.p.g} g) · Carbohidratos: ${macros.c.pct}% (${macros.c.g} g) · Lípidos: ${macros.l.pct}% (${macros.l.g} g)`,
-          bold: true,
-          size: 20
-        }),
-        new TextRun({ text: `\nProfesional a cargo: ${responsable}`, italics: true, size: 18, color: TEXT_MUTED })
-      ]
-    })
-  ];
-
-  // 2. Tabla de Intercambios por Tiempo de Comida
-  const eqMap = pl.eq || {};
-  const activeMealTimes = MEAL_TIMES.filter(mt => {
-    if (mt.k === 'c1' && (pl.snackConfig === 'pm_only' || pl.snackConfig === 'none')) return false;
-    if (mt.k === 'c2' && (pl.snackConfig === 'am_only' || pl.snackConfig === 'none')) return false;
-    return true;
-  });
-
-  const exchangeTableRows = [
-    new TableRow({
-      tableHeader: true,
-      children: [
-        new TableCell({
-          width: { size: 30, type: WidthType.PERCENTAGE },
-          shading: { fill: BRAND_COLOR },
-          margins: cellMargins,
-          children: [new Paragraph({ children: [new TextRun({ text: 'Grupo de Alimento', bold: true, color: 'FFFFFF', size: 18 })] })]
-        }),
-        ...activeMealTimes.map(mt => new TableCell({
-          width: { size: 70 / activeMealTimes.length, type: WidthType.PERCENTAGE },
-          shading: { fill: BRAND_COLOR },
-          margins: cellMargins,
-          alignment: AlignmentType.CENTER,
-          children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: mt.n, bold: true, color: 'FFFFFF', size: 18 })] })]
-        }))
-      ]
-    }),
-    ...EXCHANGE_GROUPS.map((gItem, rIdx) => {
-      const rowVals = (eqMap[gItem.k] || ['', '', '', '', '']);
-      const totalInRow = rowVals.reduce((acc, v) => acc + (parseFloat(String(v).replace(',', '.')) || 0), 0);
-      if (totalInRow === 0) return null;
-
-      return new TableRow({
+  // 1. Encabezado Oficial Hospital San Miguel (Tabla de 2 columnas sin bordes)
+  const headerTable = new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    borders: {
+      top: { style: BorderStyle.NONE },
+      bottom: { style: BorderStyle.NONE },
+      left: { style: BorderStyle.NONE },
+      right: { style: BorderStyle.NONE }
+    },
+    rows: [
+      new TableRow({
         children: [
+          // Lado Izquierdo: HOSPITAL NACIONAL SAN MIGUEL
           new TableCell({
-            width: { size: 30, type: WidthType.PERCENTAGE },
-            shading: { fill: rIdx % 2 === 0 ? GRAY_BG : 'FFFFFF' },
-            borders: cellBorder,
-            margins: cellMargins,
-            children: [new Paragraph({ children: [new TextRun({ text: gItem.n, bold: true, size: 18 })] })]
+            width: { size: 50, type: WidthType.PERCENTAGE },
+            margins: { top: 0, bottom: 60, left: 0, right: 0 },
+            borders: {
+              top: { style: BorderStyle.NONE },
+              bottom: { style: BorderStyle.NONE },
+              left: { style: BorderStyle.NONE },
+              right: { style: BorderStyle.NONE }
+            },
+            children: [
+              new Paragraph({
+                alignment: AlignmentType.LEFT,
+                spacing: { after: 20 },
+                children: [
+                  new TextRun({ text: 'HOSPITAL\n', bold: true, size: 20, color: '1E293B', font: 'Arial' }),
+                  new TextRun({ text: 'NACIONAL\n', bold: true, size: 15, color: '475569', font: 'Arial' }),
+                  new TextRun({ text: 'SAN MIGUEL', bold: true, size: 18, color: '1E293B', font: 'Arial' })
+                ]
+              }),
+              new Paragraph({
+                alignment: AlignmentType.LEFT,
+                children: [
+                  new TextRun({ text: '· · · ☼ · · ·', size: 14, color: '94A3B8' })
+                ]
+              })
+            ]
           }),
-          ...activeMealTimes.map((mt, mIdx) => {
-            const originalMIdx = MEAL_TIMES.findIndex(x => x.k === mt.k);
-            const val = (eqMap[gItem.k] || [])[originalMIdx] || '';
-            return new TableCell({
-              width: { size: 70 / activeMealTimes.length, type: WidthType.PERCENTAGE },
-              shading: { fill: rIdx % 2 === 0 ? GRAY_BG : 'FFFFFF' },
-              borders: cellBorder,
-              margins: cellMargins,
-              children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: val ? String(val) : '—', size: 18 })] })]
-            });
+          // Lado Derecho: Sello Institucional NUTRICIÓN
+          new TableCell({
+            width: { size: 50, type: WidthType.PERCENTAGE },
+            margins: { top: 0, bottom: 60, left: 0, right: 0 },
+            borders: {
+              top: { style: BorderStyle.NONE },
+              bottom: { style: BorderStyle.NONE },
+              left: { style: BorderStyle.NONE },
+              right: { style: BorderStyle.NONE }
+            },
+            children: [
+              new Paragraph({
+                alignment: AlignmentType.RIGHT,
+                spacing: { after: 10 },
+                children: [
+                  new TextRun({ text: 'Hospital Nacional "San Juan de Dios"\n', bold: true, size: 16, color: '334155', font: 'Arial' }),
+                  new TextRun({ text: 'San Miguel\n', size: 15, color: '475569', font: 'Arial' }),
+                  new TextRun({ text: 'NUTRICIÓN', bold: true, size: 20, color: 'B91C1C', font: 'Arial' })
+                ]
+              })
+            ]
           })
         ]
-      });
-    }).filter(Boolean)
-  ];
-
-  const exchangeTable = new Table({
-    width: { size: 100, type: WidthType.PERCENTAGE },
-    rows: exchangeTableRows
+      })
+    ]
   });
 
-  // 3. Menú Semanal de 7 Días (Lunes a Domingo)
-  const menuDaysSections = [];
+  // Datos breves del paciente en subtítulo
+  const patientSubheader = new Paragraph({
+    spacing: { before: 40, after: 100 },
+    children: [
+      new TextRun({ text: 'Paciente: ', bold: true, size: 17 }),
+      new TextRun({ text: `${nombre}    `, size: 17 }),
+      new TextRun({ text: 'Expediente: ', bold: true, size: 17 }),
+      new TextRun({ text: `${expediente}    `, size: 17 }),
+      new TextRun({ text: 'Fecha: ', bold: true, size: 17 }),
+      new TextRun({ text: `${fecha}    `, size: 17 }),
+      new TextRun({ text: 'Prescripción: ', bold: true, size: 17 }),
+      new TextRun({ text: `${vct} kcal/día (P: ${macros.p.pct}% · CHO: ${macros.c.pct}% · L: ${macros.l.pct}%)`, size: 17, italics: true })
+    ]
+  });
 
-  DAYS_OF_WEEK.forEach(dayInfo => {
-    const dayData = weeklyPlan[dayInfo.key] || { dayName: dayInfo.name, meals: {} };
+  // 2. Filas de la Gran Tabla de 8 Columnas (Tiempo de Comida | Menú 1 - Menú 7)
+  const mealRowsMeta = [
+    { key: 'des', label: 'Desayuno' },
+    { key: 'c1', label: 'Refrigerio' },
+    { key: 'alm', label: 'Almuerzo' },
+    { key: 'c2', label: 'Refrigerio' },
+    { key: 'cen', label: 'Cena' }
+  ];
 
-    menuDaysSections.push(
-      new Paragraph({
-        heading: HeadingLevel.HEADING_2,
-        spacing: { before: 240, after: 100 },
+  // Columnas: Tiempo (11%) + 7 Menús (12.71% c/u) = 100%
+  const colWidths = [11, 12.71, 12.71, 12.71, 12.71, 12.71, 12.71, 12.71];
+
+  const tableHeaderRow = new TableRow({
+    tableHeader: true,
+    children: [
+      new TableCell({
+        width: { size: colWidths[0], type: WidthType.PERCENTAGE },
+        borders: fullTableBorder,
+        margins: cellMargins,
+        shading: { fill: 'FFFFFF' },
         children: [
-          new TextRun({ text: `📅 ${dayInfo.name.toUpperCase()}`, bold: true, size: 24, color: BRAND_DARK })
-        ]
-      })
-    );
-
-    const dayMealRows = [
-      new TableRow({
-        tableHeader: true,
-        children: [
-          new TableCell({
-            width: { size: 22, type: WidthType.PERCENTAGE },
-            shading: { fill: '0F766E' },
-            margins: cellMargins,
-            children: [new Paragraph({ children: [new TextRun({ text: 'Tiempo de Comida', bold: true, color: 'FFFFFF', size: 18 })] })]
-          }),
-          new TableCell({
-            width: { size: 33, type: WidthType.PERCENTAGE },
-            shading: { fill: '0F766E' },
-            margins: cellMargins,
-            children: [new Paragraph({ children: [new TextRun({ text: 'Platillo Típico Salvadoreño', bold: true, color: 'FFFFFF', size: 18 })] })]
-          }),
-          new TableCell({
-            width: { size: 45, type: WidthType.PERCENTAGE },
-            shading: { fill: '0F766E' },
-            margins: cellMargins,
-            children: [new Paragraph({ children: [new TextRun({ text: 'Ingredientes Medidos (Medida Casera)', bold: true, color: 'FFFFFF', size: 18 })] })]
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            children: [new TextRun({ text: 'Tiempo de\ncomida', bold: true, size: 17, font: 'Arial' })]
           })
         ]
       }),
-      ...activeMealTimes.map((mt, idx) => {
-        const meal = dayData.meals[mt.k];
-        if (!meal) return null;
-
-        const ingLines = (meal.ingredients || []).map(
-          ing => `• ${ing.name}: ${ing.measure}`
-        );
-
-        const prepText = meal.prepNotes ? `\nPreparación: ${meal.prepNotes}` : '';
-        const renalText = meal.clinicalNotes ? `\nAviso clínico: ${meal.clinicalNotes}` : '';
-
-        return new TableRow({
+      ...[1, 2, 3, 4, 5, 6, 7].map((num, idx) => (
+        new TableCell({
+          width: { size: colWidths[idx + 1], type: WidthType.PERCENTAGE },
+          borders: fullTableBorder,
+          margins: cellMargins,
+          shading: { fill: 'FFFFFF' },
           children: [
-            new TableCell({
-              width: { size: 22, type: WidthType.PERCENTAGE },
-              shading: { fill: idx % 2 === 0 ? GRAY_BG : 'FFFFFF' },
-              borders: cellBorder,
-              margins: cellMargins,
-              children: [
-                new Paragraph({ children: [new TextRun({ text: mt.n, bold: true, size: 18, color: BRAND_DARK })] }),
-                new Paragraph({ children: [new TextRun({ text: `${Math.round(meal.totals?.kcal || 0)} kcal`, size: 16, color: TEXT_MUTED })] })
-              ]
-            }),
-            new TableCell({
-              width: { size: 33, type: WidthType.PERCENTAGE },
-              shading: { fill: idx % 2 === 0 ? GRAY_BG : 'FFFFFF' },
-              borders: cellBorder,
-              margins: cellMargins,
-              children: [
-                new Paragraph({ children: [new TextRun({ text: meal.dishName || 'Platillo balanceado', bold: true, size: 18 })] }),
-                new Paragraph({ children: [new TextRun({ text: meal.description || '', size: 16, italics: true, color: TEXT_MUTED })] }),
-                prepText ? new Paragraph({ children: [new TextRun({ text: prepText, size: 15, color: '0369A1' })] }) : new Paragraph({ text: '' }),
-                renalText ? new Paragraph({ children: [new TextRun({ text: renalText, size: 15, color: 'B45309' })] }) : new Paragraph({ text: '' })
-              ]
-            }),
-            new TableCell({
-              width: { size: 45, type: WidthType.PERCENTAGE },
-              shading: { fill: idx % 2 === 0 ? GRAY_BG : 'FFFFFF' },
-              borders: cellBorder,
-              margins: cellMargins,
-              children: ingLines.map(line => new Paragraph({
-                spacing: { after: 20 },
-                children: [new TextRun({ text: line, size: 17 })]
-              }))
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              children: [new TextRun({ text: `Menú ${num}`, bold: true, size: 17, font: 'Arial' })]
             })
           ]
-        });
-      }).filter(Boolean)
-    ];
-
-    menuDaysSections.push(
-      new Table({
-        width: { size: 100, type: WidthType.PERCENTAGE },
-        rows: dayMealRows
-      })
-    );
+        })
+      ))
+    ]
   });
 
-  // 4. Guía de Sustitución Rápida / Equivalencias
-  const subGuide = getQuickSubstitutionGuide();
-  const subGuideParagraphs = [
-    new Paragraph({
-      heading: HeadingLevel.HEADING_2,
-      spacing: { before: 280, after: 120 },
+  // Generar las 5 filas de tiempos de comida
+  const dayKeysOrder = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo'];
+
+  const mealTableRows = mealRowsMeta.map(mMeta => {
+    return new TableRow({
       children: [
-        new TextRun({ text: 'GUÍA PRÁCTICA DE EQUIVALENCIAS Y SUSTITUCIÓN EN CASA', bold: true, size: 24, color: BRAND_DARK })
-      ]
-    }),
-    new Paragraph({
-      spacing: { after: 100 },
-      children: [
-        new TextRun({
-          text: 'Si no tiene disponible alguno de los alimentos del menú, puede sustituirlo por cualquier otra opción del mismo grupo respetando su medida exacta:',
-          italics: true,
-          size: 18
+        // Columna 1: Nombre del tiempo de comida
+        new TableCell({
+          width: { size: colWidths[0], type: WidthType.PERCENTAGE },
+          borders: fullTableBorder,
+          margins: cellMargins,
+          children: [
+            new Paragraph({
+              children: [new TextRun({ text: mMeta.label, bold: true, size: 17, font: 'Arial' })]
+            })
+          ]
+        }),
+        // Columnas 2 a 8: Contenido del Menú 1 al Menú 7
+        ...[0, 1, 2, 3, 4, 5, 6].map(colIdx => {
+          const hospTemplate = HOSPITAL_MENUS_SAN_MIGUEL[colIdx];
+          const hospMeal = hospTemplate?.meals[mMeta.key];
+
+          // Si el planificador semanal tiene un menú personalizado para este día
+          const dayKey = dayKeysOrder[colIdx];
+          const dynamicMeal = weeklyPlan[dayKey]?.meals[mMeta.key];
+
+          const cellParagraphs = [];
+
+          if (dynamicMeal && dynamicMeal.ingredients?.length > 0) {
+            // Usar platillo adaptado con medidas exactas
+            cellParagraphs.push(
+              new Paragraph({
+                spacing: { after: 20 },
+                children: [new TextRun({ text: `${dynamicMeal.dishName}:`, bold: true, size: 15, font: 'Arial' })]
+              })
+            );
+
+            dynamicMeal.ingredients.forEach(ing => {
+              cellParagraphs.push(
+                new Paragraph({
+                  spacing: { after: 15 },
+                  children: [new TextRun({ text: `• ${ing.measure} de ${ing.name}`, size: 14, font: 'Arial' })]
+                })
+              );
+            });
+
+            if (dynamicMeal.prepNotes) {
+              cellParagraphs.push(
+                new Paragraph({
+                  spacing: { after: 10 },
+                  children: [new TextRun({ text: dynamicMeal.prepNotes, italics: true, size: 13, color: '475569', font: 'Arial' })]
+                })
+              );
+            }
+          } else if (hospMeal) {
+            // Usar receta oficial del hospital
+            if (hospMeal.title) {
+              cellParagraphs.push(
+                new Paragraph({
+                  spacing: { after: 20 },
+                  children: [new TextRun({ text: `${hospMeal.title}:`, bold: true, size: 15, font: 'Arial' })]
+                })
+              );
+            }
+            hospMeal.text.split('\n').forEach(line => {
+              cellParagraphs.push(
+                new Paragraph({
+                  spacing: { after: 15 },
+                  children: [new TextRun({ text: line, size: 14, font: 'Arial' })]
+                })
+              );
+            });
+          } else {
+            cellParagraphs.push(
+              new Paragraph({
+                children: [new TextRun({ text: 'Según prescripción médica.', size: 14, font: 'Arial' })]
+              })
+            );
+          }
+
+          return new TableCell({
+            width: { size: colWidths[colIdx + 1], type: WidthType.PERCENTAGE },
+            borders: fullTableBorder,
+            margins: cellMargins,
+            children: cellParagraphs
+          });
         })
       ]
-    }),
-    ...subGuide.map(item => new Paragraph({
-      spacing: { after: 80 },
-      children: [
-        new TextRun({ text: `• ${item.group}: `, bold: true, size: 18, color: BRAND_COLOR }),
-        new TextRun({ text: item.examples, size: 18 })
-      ]
-    }))
-  ];
+    });
+  });
 
-  // 5. Lista de Compras Semanal Consolidada
-  const groceryList = calculateWeeklyGroceryList(weeklyPlan);
-  const groceryParagraphs = [
-    new Paragraph({
-      heading: HeadingLevel.HEADING_2,
-      spacing: { before: 280, after: 120 },
+  // 3. Filas de Recomendaciones Clínicas al pie de la tabla (abarcando todo el ancho)
+  const recommendationsRows = HOSPITAL_GENERAL_RECOMMENDATIONS.map(rec => {
+    return new TableRow({
       children: [
-        new TextRun({ text: '🛒 LISTA DE COMPRAS SEMANAL (CONSOLIDADA DE 7 DÍAS)', bold: true, size: 24, color: BRAND_DARK })
+        new TableCell({
+          columnSpan: 8,
+          borders: fullTableBorder,
+          margins: { top: 60, bottom: 60, left: 100, right: 100 },
+          children: [
+            new Paragraph({
+              spacing: { after: 10 },
+              children: [
+                new TextRun({ text: `- ${rec}`, size: 15, font: 'Arial' })
+              ]
+            })
+          ]
+        })
       ]
-    }),
-    ...Object.values(groceryList).map(cat => [
-      new Paragraph({
-        spacing: { before: 120, after: 60 },
-        children: [
-          new TextRun({ text: `■ ${cat.title}:`, bold: true, size: 20, color: '0F766E' })
-        ]
-      }),
-      ...cat.items.map(item => new Paragraph({
-        spacing: { after: 30 },
-        children: [
-          new TextRun({ text: `   [  ] ${item.name} `, bold: true, size: 17 }),
-          new TextRun({ text: `— ${item.summary}`, size: 16, color: TEXT_MUTED })
-        ]
-      }))
-    ]).flat()
-  ];
+    });
+  });
 
-  // Construcción del Documento Completo
+  // Construir la Tabla Principal Completa
+  const mainHospitalTable = new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    borders: fullTableBorder,
+    rows: [
+      tableHeaderRow,
+      ...mealTableRows,
+      ...recommendationsRows
+    ]
+  });
+
+  // 4. Sello y Firma Profesional en Cuadro Inferior Derecho
+  const signatureTable = new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    borders: {
+      top: { style: BorderStyle.NONE },
+      bottom: { style: BorderStyle.NONE },
+      left: { style: BorderStyle.NONE },
+      right: { style: BorderStyle.NONE }
+    },
+    rows: [
+      new TableRow({
+        children: [
+          // Espacio en blanco a la izquierda (60%)
+          new TableCell({
+            width: { size: 60, type: WidthType.PERCENTAGE },
+            borders: {
+              top: { style: BorderStyle.NONE },
+              bottom: { style: BorderStyle.NONE },
+              left: { style: BorderStyle.NONE },
+              right: { style: BorderStyle.NONE }
+            },
+            children: [new Paragraph({ text: '' })]
+          }),
+          // Cuadro de firma bordeado a la derecha (40%)
+          new TableCell({
+            width: { size: 40, type: WidthType.PERCENTAGE },
+            borders: fullTableBorder,
+            margins: { top: 80, bottom: 80, left: 120, right: 120 },
+            children: [
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                spacing: { after: 20 },
+                children: [
+                  new TextRun({ text: `${responsable}   `, bold: true, size: 16, font: 'Arial' }),
+                  new TextRun({ text: 'Licda. Diana Cortéz', size: 15, font: 'Arial' })
+                ]
+              }),
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                spacing: { after: 20 },
+                children: [
+                  new TextRun({ text: 'LICENCIADA EN NUTRICIÓN Y DIETÉTICA   ', size: 14, font: 'Arial' }),
+                  new TextRun({ text: 'Nutricionista y Dietista', size: 14, font: 'Arial' })
+                ]
+              }),
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                children: [
+                  new TextRun({ text: jvpm, bold: true, size: 16, color: '1E3A8A', font: 'Arial' })
+                ]
+              })
+            ]
+          })
+        ]
+      })
+    ]
+  });
+
+  // Ensamblar Documento en Orientación Landscape (Horizontal)
   const doc = new Document({
     sections: [
       {
         properties: {
           page: {
-            margin: { top: 1000, bottom: 1000, left: 1000, right: 1000 }
+            size: {
+              orientation: PageOrientation.LANDSCAPE
+            },
+            margin: { top: 720, bottom: 720, left: 720, right: 720 }
           }
         },
         children: [
-          ...headerSection,
-          new Paragraph({
-            heading: HeadingLevel.HEADING_2,
-            spacing: { before: 160, after: 100 },
-            children: [
-              new TextRun({ text: 'DISTRIBUCIÓN DE INTERCAMBIOS POR TIEMPO DE COMIDA', bold: true, size: 22, color: BRAND_DARK })
-            ]
-          }),
-          exchangeTable,
-          ...menuDaysSections,
-          ...subGuideParagraphs,
-          ...groceryParagraphs,
-          new Paragraph({
-            alignment: AlignmentType.CENTER,
-            spacing: { before: 300, after: 100 },
-            children: [
-              new TextRun({
-                text: '— Documento editable generado con NutriClínica · Compatible con Google Docs y MS Word —',
-                italics: true,
-                size: 16,
-                color: TEXT_MUTED
-              })
-            ]
-          })
+          headerTable,
+          patientSubheader,
+          mainHospitalTable,
+          new Paragraph({ spacing: { before: 120, after: 60 }, text: '' }),
+          signatureTable
         ]
       }
     ]
@@ -358,12 +381,12 @@ export async function generateSalvadoranMenuDocx(patient = {}, computed = {}, we
   return await Packer.toBlob(doc);
 }
 
-// Descarga directa en el navegador
+// Descarga directa del archivo en el navegador
 export async function downloadSalvadoranMenuDocx(patient = {}, computed = {}, weeklyPlan = {}) {
   const blob = await generateSalvadoranMenuDocx(patient, computed, weeklyPlan);
   const patientName = (patient.gen?.nombre || 'Paciente').replace(/[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑ_ ]/g, '').replace(/\s+/g, '_');
   const dateStr = patient.gen?.fecha || new Date().toISOString().slice(0, 10);
-  const filename = `Menu_Semanal_7Dias_${patientName}_${dateStr}.docx`;
+  const filename = `Menu_Hospitalario_SanMiguel_${patientName}_${dateStr}.docx`;
 
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');

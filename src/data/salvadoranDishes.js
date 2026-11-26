@@ -582,7 +582,274 @@ export const SALVADORAN_DISHES = [
       { name: 'Galletas de soda o trigo horneadas', exchangeGroup: 'almidones', baseQty: 4, unit: 'galletas', exchanges: 0.75, step: 2 },
       { name: 'Semillas de marañón o maní tostado', exchangeGroup: 'grasas', baseQty: 6, unit: 'unidades', exchanges: 1, step: 4 },
     ]
+  },
+
+  // ==========================================
+  // PREPARACIONES CLÍNICAS HOSPITALARIAS (HOSPITAL SAN JUAN DE DIOS / RIISS)
+  // ==========================================
+  {
+    id: 'des_hosp_tortitas_brocoli',
+    name: 'Tortitas Pequeñas de Brócoli con Queso Fresco y Puré de Papa',
+    mealType: 'des',
+    proteinType: 'huevo_lacteo',
+    costLevel: 'economico',
+    description: '2 tortitas pequeñas de brócoli, con 1 ½ cda de incaparina sin sabor, rellenas con 1 onza de queso fresco y fritas en 1 cda de aceite, servidas con ½ taza de puré de papa.',
+    prepNotes: 'Brócoli cocido al vapor y picado, mezclar con incaparina para dar consistencia y freír con aceite vegetal medido.',
+    clinicalTags: ['bland', 'renal_adaptable', 'diabetes_friendly'],
+    ingredients: [
+      { name: 'Puré de papa casero', exchangeGroup: 'almidones', baseQty: 0.5, unit: 'taza', exchanges: 1, step: 2 },
+      { name: 'Incaparina sin sabor en las tortitas', exchangeGroup: 'incaparina', baseQty: 1.5, unit: 'cda', exchanges: 0.5, step: 1 },
+      { name: 'Queso fresco artesanal (relleno)', exchangeGroup: 'prot_sm', baseQty: 1, unit: 'onza (30 g)', exchanges: 1, step: 3 },
+      { name: 'Brócoli cocido picado', exchangeGroup: 'veg_sa', baseQty: 1, unit: 'taza', exchanges: 1, step: 1 },
+      { name: 'Aceite vegetal para dorar', exchangeGroup: 'grasas', baseQty: 1, unit: 'cda', exchanges: 1, step: 4 },
+    ]
+  },
+  {
+    id: 'des_hosp_chilaquila',
+    name: 'Chilaquila de Tortilla con Quesillo y Puré de Brócoli',
+    mealType: 'des',
+    proteinType: 'lacteo',
+    costLevel: 'economico',
+    description: '1 tortilla de maíz pequeña rellena con 1 onza de quesillo, frita en 1 cda de aceite, acompañada de ½ taza de puré de brócoli con 1 ½ cda de incaparina sin sabor.',
+    prepNotes: 'Tortilla de maíz rellena de quesillo bajo en sal y dorada con aceite medido. Brócoli hecho puré con incaparina.',
+    clinicalTags: ['bland', 'diabetes_friendly'],
+    ingredients: [
+      { name: 'Tortilla de maíz pequeña', exchangeGroup: 'almidones', baseQty: 1, unit: 'unidad', exchanges: 1, step: 2 },
+      { name: 'Quesillo bajo en grasa / queso fresco', exchangeGroup: 'prot_sm', baseQty: 1, unit: 'onza (30 g)', exchanges: 1, step: 3 },
+      { name: 'Puré de brócoli con incaparina', exchangeGroup: 'veg_sa', baseQty: 0.5, unit: 'taza', exchanges: 0.5, step: 1 },
+      { name: 'Incaparina sin sabor en puré', exchangeGroup: 'incaparina', baseQty: 1.5, unit: 'cda', exchanges: 0.5, step: 1 },
+      { name: 'Aceite vegetal para freír', exchangeGroup: 'grasas', baseQty: 1, unit: 'cda', exchanges: 1, step: 4 },
+    ]
+  },
+  {
+    id: 'alm_hosp_chaomein_pollo',
+    name: 'Chao Mein Hospitalario de Pollo y Vegetales Criollos',
+    mealType: 'alm',
+    proteinType: 'aves',
+    costLevel: 'regular',
+    description: '½ taza de pasta (fideos) cocida con ½ taza de vegetales cocidos (zanahoria, güisquil), 1 cda de aceite y 3 onzas de pechuga de pollo sin piel a la plancha.',
+    prepNotes: 'Fideos hervidos al dente, saltear con güisquil y zanahoria con aceite vegetal medido y pechuga desgrasada.',
+    clinicalTags: ['bland', 'diabetes_friendly', 'hipertension_friendly'],
+    ingredients: [
+      { name: 'Pasta fideos cocida', exchangeGroup: 'almidones', baseQty: 0.5, unit: 'taza', exchanges: 1, step: 2 },
+      { name: 'Pechuga de pollo sin piel en trocitos', exchangeGroup: 'prot_magra', baseQty: 3, unit: 'onzas (90 g)', exchanges: 3, step: 3 },
+      { name: 'Vegetales cocidos (güisquil, zanahoria)', exchangeGroup: 'veg_sa', baseQty: 1, unit: 'taza', exchanges: 1, step: 1 },
+      { name: 'Aceite vegetal de cocción', exchangeGroup: 'grasas', baseQty: 1, unit: 'cda', exchanges: 1, step: 4 },
+    ]
+  },
+  {
+    id: 'cen_hosp_coditos_tomate',
+    name: 'Coditos en Salsa de Tomate Natural con Queso Duro Blando y Manzana',
+    mealType: 'cen',
+    proteinType: 'lacteo',
+    costLevel: 'economico',
+    description: '½ taza de coditos de pasta cocida con ½ taza de jugo de vegetales (tomate) cocido, 1 ½ taza de incaparina cocida con 1 cda de crema espesa, 1 onza de queso duro blando y 1 manzana en trozos.',
+    prepNotes: 'Pasta cocida con salsa natural de tomate criollo y queso desgrasado.',
+    clinicalTags: ['bland'],
+    ingredients: [
+      { name: 'Coditos de pasta cocida', exchangeGroup: 'almidones', baseQty: 0.5, unit: 'taza', exchanges: 1, step: 2 },
+      { name: 'Queso duro blando salvadoreño', exchangeGroup: 'prot_sm', baseQty: 1, unit: 'onza (30 g)', exchanges: 1, step: 3 },
+      { name: 'Salsa natural de tomate y vegetales', exchangeGroup: 'veg_sa', baseQty: 0.5, unit: 'taza', exchanges: 0.5, step: 1 },
+      { name: 'Incaparina sin sabor', exchangeGroup: 'incaparina', baseQty: 1.5, unit: 'taza cocida', exchanges: 1, step: 1 },
+      { name: 'Crema espesa o aceite', exchangeGroup: 'grasas', baseQty: 1, unit: 'cda', exchanges: 1, step: 4 },
+      { name: 'Manzana fresca en trozos', exchangeGroup: 'frutas', baseQty: 1, unit: 'unidad', exchanges: 1, step: 1 },
+    ]
   }
+];
+
+// Matriz de los 7 Menús Hospitalarios de El Salvador (Hospital Nacional San Miguel)
+export const HOSPITAL_MENUS_SAN_MIGUEL = [
+  {
+    menuNum: 1,
+    dayName: 'Menú 1',
+    meals: {
+      des: {
+        title: 'Puré de zanahoria y Frijoles licuados',
+        text: '½ taza de puré de zanahoria agregar 1 ½ cda de incaparina sin sabor.\n½ taza de frijoles licuados con 1 cda de aceite + 1 ½ cda de incaparina sin sabor.'
+      },
+      c1: {
+        title: 'Yogur con fruta',
+        text: '½ taza de yogur + ½ taza de mango maduro + 1 ½ cda de incaparina sin sabor + 1 cda de aceite (sin usar).'
+      },
+      alm: {
+        title: 'Pechuga a la plancha con puré',
+        text: '3 onzas de pechuga sin piel a la plancha.\n½ taza de puré de zanahoria + 3 cdas de incaparina sin sabor + 1 cda de crema espesa.'
+      },
+      c2: {
+        title: 'Licuado de melocotón',
+        text: '½ taza de leche entera + ½ taza de melocotones en almíbar (enlatado) + 1 ½ cda de incaparina sin sabor + 1 cda de aceite (sin usar).'
+      },
+      cen: {
+        title: 'Coditos en salsa de tomate',
+        text: '½ taza de coditos (pasta) cocida + ½ taza de jugo de vegetales (tomate) cocido + 1 ½ taza de incaparina sin sabor + 1 cda de crema espesa.\nServir con: 1 onza de queso duro blando.\n1 manzana en trozos.'
+      }
+    }
+  },
+  {
+    menuNum: 2,
+    dayName: 'Menú 2',
+    meals: {
+      des: {
+        title: 'Tortitas de brócoli con queso y puré de papa',
+        text: '2 tortitas pequeñas de brócoli, agregar 1 ½ cda de incaparina sin sabor, rellenar con 1 onza de queso fresco y freír en 1 cda de aceite.\n½ taza de puré de papa.'
+      },
+      c1: {
+        title: 'Licuado de guineo',
+        text: '½ taza de leche entera + 1 guineo pequeño + 1 ½ cda de incaparina sin sabor + 1 cda de aceite (sin usar).'
+      },
+      alm: {
+        title: 'Sopa de frijoles con pipianes',
+        text: '½ taza de frijoles enteros + 2 onzas de queso fresco + ½ taza de pipianes sancochados + 1 cda de aceite + ½ taza de caldo (sopa).'
+      },
+      c2: {
+        title: 'Pera sancochada con leche',
+        text: '1 pera sancochada.\n½ taza de leche entera + 1 ½ cda de incaparina sin sabor + 1 cda de aceite (sin usar).'
+      },
+      cen: {
+        title: 'Relleno de güisquil con arroz',
+        text: '½ güisquil pequeño, rellenar con 1 onza de quesillo (no empanizar, ni freír).\n½ taza de arroz con vegetales + 1 ½ cda de incaparina sin sabor con 1 cda de aceite.\n1 guineo de seda pequeño.'
+      }
+    }
+  },
+  {
+    menuNum: 3,
+    dayName: 'Menú 3',
+    meals: {
+      des: {
+        title: 'Pupusa casera con queso y tomatada',
+        text: '1 pupusa pequeña (a la masa agregar 1 ½ cda de incaparina sin sabor), rellenar con 1 onza de queso fresco o cuajada y freír en 1 cda de aceite.\n½ taza de tomatada sin aceite.'
+      },
+      c1: {
+        title: 'Manzana sancochada con leche',
+        text: '1 manzana sancochada.\n½ taza de leche entera + 1 ½ cda de incaparina sin sabor + 1 cda de aceite (sin usar).'
+      },
+      alm: {
+        title: 'Pollo guisado con pepino y aguacate',
+        text: '1 pierna de pollo + 2 cdas de salsa de tomate + 3 cdas de incaparina sin sabor.\n½ tortilla de maíz pequeña.\n1 taza de pepino en rodajas + ½ aguacate pequeño.'
+      },
+      c2: {
+        title: 'Yogur con guineo',
+        text: '½ taza de yogur + 1 guineo de seda pequeño + 1 ½ cda de incaparina sin sabor + 1 cda de aceite (sin usar).'
+      },
+      cen: {
+        title: 'Sopa de verduras con papa y queso',
+        text: '½ taza de vegetales cocidos (güisquil, pipián, repollo y brócoli) + ½ taza de papa cocida + 1 onza de queso duro blando + 1 ½ cda de incaparina sin sabor.\n½ taza de caldo (sopa).\n½ aguacate pequeño.\n1 pera pequeña.'
+      }
+    }
+  },
+  {
+    menuNum: 4,
+    dayName: 'Menú 4',
+    meals: {
+      des: {
+        title: 'Casamiento con queso fresco y pipianes',
+        text: '½ taza de casamiento, agregar 1 ½ cda de incaparina sin sabor, no agregar aceite.\n1 onza de queso fresco.\n½ taza de pipianes guisados sin aceite.'
+      },
+      c1: {
+        title: 'Atol de leche con pasas',
+        text: '½ taza de leche entera + 1 ½ cda de incaparina sin sabor + 3 cdas de pasas + 1 cda de aceite (sin usar).'
+      },
+      alm: {
+        title: 'Casamiento con cuajada y crema',
+        text: '½ taza de casamiento sin aceite + 1 ½ cda de incaparina sin sabor.\n2 onzas de cuajada.\n½ taza de pipianes + 1 ½ cda de incaparina sin sabor + 1 cda de crema espesa.'
+      },
+      c2: {
+        title: 'Licuado de guineo',
+        text: '½ taza de leche entera + 1 guineo pequeño + 1 ½ cda de incaparina sin sabor + 1 cda de aceite (sin usar).'
+      },
+      cen: {
+        title: 'Plátano frito con cuajada y melocotón',
+        text: '½ plátano frito con 1 cda de aceite vegetal.\n1 onza de cuajada.\n½ taza de puré de zanahoria + 1 ½ cda de incaparina sin sabor.\n½ taza de melocotones en almíbar (enlatados).'
+      }
+    }
+  },
+  {
+    menuNum: 5,
+    dayName: 'Menú 5',
+    meals: {
+      des: {
+        title: 'Chilaquila de quesillo con puré de brócoli',
+        text: '1 tortilla de maíz pequeña + 1 onza de quesillo, freír en 1 cda de aceite.\n½ taza de puré de brócoli + 1 ½ cda de incaparina sin sabor.'
+      },
+      c1: {
+        title: 'Yogur con guineo',
+        text: '½ taza de yogur + 1 guineo de seda pequeño + 1 ½ cda de incaparina sin sabor + 1 cda de aceite (sin usar).'
+      },
+      alm: {
+        title: 'Chao mein de pollo con vegetales',
+        text: '½ taza de pasta (fideos) cocida.\n½ taza de vegetales cocidos (zanahoria, güisquil) + 1 cda de aceite + 3 onzas de pechuga de pollo sin piel cruda.'
+      },
+      c2: {
+        title: 'Manzana sancochada con leche',
+        text: '1 manzana sancochada.\n½ taza de leche entera + 1 ½ cda de incaparina sin sabor + 1 cda de aceite (sin usar).'
+      },
+      cen: {
+        title: 'Papas fritas con queso y puré de brócoli',
+        text: '½ taza de papas (sancochar antes) y luego freír en 1 cda de aceite, agregar 1 onza de queso duro rallado.\n½ taza de puré de brócoli + 1 ½ cda de incaparina sin sabor.\n1 guineo de seda pequeño.'
+      }
+    }
+  },
+  {
+    menuNum: 6,
+    dayName: 'Menú 6',
+    meals: {
+      des: {
+        title: 'Plátano frito con queso y puré de zanahoria',
+        text: '½ plátano frito con 1 cda de aceite.\n1 onza de queso fresco.\n½ taza de puré de zanahoria + 1 ½ cda incaparina sin sabor.'
+      },
+      c1: {
+        title: 'Licuado de melocotón en almíbar',
+        text: '½ taza de leche entera + ½ taza de melocotones en almíbar (enlatado) + 1 ½ cda de incaparina sin sabor + 1 cda de aceite (sin usar).'
+      },
+      alm: {
+        title: 'Frijoles licuados con cuajada y pipianes',
+        text: '½ taza de frijoles licuados, sin aceite.\n2 onzas de cuajada.\n½ taza de pipianes con 1 cda de crema espesa.'
+      },
+      c2: {
+        title: 'Yogur con mango maduro',
+        text: '½ taza de yogur + ½ taza de mango maduro + 1 ½ cda de incaparina sin sabor + 1 cda de aceite (sin usar).'
+      },
+      cen: {
+        title: 'Pupusa casera con queso y tomatada',
+        text: '1 pupusa, rellena con 1 onza de queso fresco y freír en 1 cda de aceite.\n½ taza de tomatada sin aceite + 1 ½ cda de incaparina sin sabor.\n1 manzana pequeña en trozos.'
+      }
+    }
+  },
+  {
+    menuNum: 7,
+    dayName: 'Menú 7',
+    meals: {
+      des: {
+        title: 'Tortitas de papa con quesillo y brócoli',
+        text: '1 tortita pequeña de papa, agregar 1 ½ cda de incaparina sin sabor, rellenar con 1 onza de quesillo, freír en 1 cda de aceite.\n½ taza de brócoli sancochado.'
+      },
+      c1: {
+        title: 'Pera sancochada con leche',
+        text: '1 pera sancochada.\n½ taza de leche entera + 1 ½ cda de incaparina sin sabor + 1 cda de aceite (sin usar).'
+      },
+      alm: {
+        title: 'Sopa de tortilla con pollo y aguacate',
+        text: '1 taza de vegetales crudos (tomate, cebolla, chile) + 1 tortilla de maíz + ½ taza de caldo de pollo (licuado), luego cocinar.\nServir con: 3 onzas de pechuga de pollo sancochado + ½ aguacate pequeño.'
+      },
+      c2: {
+        title: 'Atol de leche con pasas',
+        text: '½ taza de leche entera + 1 ½ cda de incaparina sin sabor + 3 cdas de pasas + 1 cda de aceite (sin usar).'
+      },
+      cen: {
+        title: 'Casamiento con pipianes y aguacate',
+        text: '½ taza de casamiento sin aceite, agregar 1 ½ cda de incaparina sin sabor.\n½ taza de pipianes al vapor.\n½ aguacate pequeño.\n1 pera pequeña.'
+      }
+    }
+  }
+];
+
+// Recomendaciones Clínicas Hospitalarias Obligatorias de El Salvador (pie del documento)
+export const HOSPITAL_GENERAL_RECOMMENDATIONS = [
+  'No se incluyen en las verduras: papa, yuca, camote, elote. Estos se contabilizan como carbohidratos.',
+  'Se recomienda no utilizar aderezos de tipo mayonesa, salsa de tomate industrial, pepinesa, etc. Si puede utilizar vinagre y hierbas aromáticas para dar sabor a sus comidas.',
+  'Consuma como mínimo 1 litro de agua por día. Reduzca el consumo de sal y productos que la contengan (cubitos, sazonadores, consomés, sopas deshidratadas, enlatados, etc.)',
+  'Es importante no omitir ningún tiempo de comida. Y realizar actividad física.',
+  'Puede dar sabor a las comidas con hierbas aromáticas, sal, ajo, apio, cúrcuma, comino, pimienta, etc.'
 ];
 
 export const PROTEIN_CATEGORIES = [

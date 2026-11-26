@@ -8,6 +8,7 @@ import {
 import {
   COST_LEVELS, generateSalvadoranMenu, getRiissAdaptationNotes, generate7DaySalvadoranMenu, calculateWeeklyGroceryList, getQuickSubstitutionGuide
 } from '../data/salvadoranMenuEngine.js';
+import { autoSolveExchangesToAdequacy, diagnoseExchangeConflict } from '../data/exchangeAdequacySolver.js';
 import { SALVADORAN_DISHES, DAYS_OF_WEEK } from '../data/salvadoranDishes.js';
 import { downloadSalvadoranMenuDocx } from '../lib/salvadoranDocxExport.js';
 import RissDietCard from './RissDietCard.jsx';
@@ -70,6 +71,10 @@ export default function ExchangePlanSection({ p, c, set, upd, Pill }) {
   const [showGroceryList, setShowGroceryList] = useState(false);
   const [showSubGuide, setShowSubGuide] = useState(false);
   const [customOverrides, setCustomOverrides] = useState(p.plan?.weeklyOverrides || {});
+
+  // Diagnóstico y resolución de adecuación clínica (95% - 105%)
+  const [adequacyDiagnostic, setAdequacyDiagnostic] = useState(null);
+  const [showConflictExplainer, setShowConflictExplainer] = useState(false);
 
   const snackConfig = p.plan?.snackConfig || 'both';
 
@@ -387,6 +392,58 @@ export default function ExchangePlanSection({ p, c, set, upd, Pill }) {
     return getQuickSubstitutionGuide();
   }, []);
 
+  // Detección automática de adecuación clínica en tiempo real (95% - 105%)
+  const isAnyMacroOutOfRange = useMemo(() => {
+    if (!excelCalc) return false;
+    const { adecCho, adecChon, adecCooh, adecKcal } = excelCalc;
+    const isOut = (v) => v != null && (v < 95.0 || v > 105.0);
+    return isOut(adecCho) || isOut(adecChon) || isOut(adecCooh) || isOut(adecKcal);
+  }, [excelCalc]);
+
+  const dynamicConflictDiagnosis = useMemo(() => {
+    if (adequacyDiagnostic) return adequacyDiagnostic;
+    if (isAnyMacroOutOfRange && vctMeta) {
+      const diag = diagnoseExchangeConflict({ kcal: vctMeta, cho: choMetaG, p: chonMetaG, l: coohMetaG }, rissData);
+      return {
+        success: false,
+        diagnostic: diag
+      };
+    }
+    return null;
+  }, [adequacyDiagnostic, isAnyMacroOutOfRange, vctMeta, choMetaG, chonMetaG, coohMetaG, rissData]);
+
+  // Acción: Recalcular y cuadrar estrictamente al rango de adecuación (95% - 105%)
+  const handleRecalculateAndBalanceAdequacy = () => {
+    if (!vctMeta) return;
+
+    const targets = {
+      kcal: vctMeta,
+      cho: choMetaG,
+      p: chonMetaG,
+      l: coohMetaG
+    };
+
+    const solverResult = autoSolveExchangesToAdequacy(targets, {
+      rissData,
+      allowHalf: true,
+      preferredMilk: 'leche_sd'
+    });
+
+    setAdequacyDiagnostic(solverResult);
+
+    if (solverResult.totals && Object.keys(solverResult.totals).length > 0) {
+      const newEq = buildMealDistributionFromTotals(solverResult.totals);
+      upd(x => ({
+        ...x,
+        plan: {
+          ...x.plan,
+          totals: solverResult.totals,
+          eq: newEq
+        }
+      }));
+    }
+  };
+
   // Acción 1: Calcular intercambios automáticamente para cuadrar metas (95-105%)
   const handleAutoCalculateExchanges = () => {
     if (!m || !vctMeta) return;
@@ -649,18 +706,90 @@ export default function ExchangePlanSection({ p, c, set, upd, Pill }) {
           </div>
           <div className="flex flex-wrap gap-2">
             <button
-              className="btn btn-primary"
+              type="button"
+              className="btn btn-primary shadow-xs flex items-center gap-1.5"
               disabled={!m}
               style={{ opacity: m ? 1 : 0.5 }}
-              onClick={handleAutoCalculateExchanges}
+              onClick={handleRecalculateAndBalanceAdequacy}
+              title="Ajusta automáticamente las porciones para que CHO, Proteína, Lípidos y Kcal se ubiquen estrictamente dentro del rango del 95% al 105%"
             >
-              <Sparkles className="w-4 h-4" /> Calcular y Distribuir Automáticamente
+              <Sparkles className="w-4 h-4 text-amber-300" /> Recalcular y cuadrar al rango de adecuación (95% - 105%)
             </button>
-            <button className="btn" onClick={handleClearAll}>
+            <button
+              type="button"
+              className="btn btn-outline text-xs"
+              disabled={!m}
+              onClick={handleAutoCalculateExchanges}
+              title="Cuadre secuencial paso a paso"
+            >
+              Cuadre secuencial
+            </button>
+            <button type="button" className="btn btn-ghost text-xs" onClick={handleClearAll}>
               Limpiar
             </button>
           </div>
         </div>
+
+        {/* Panel Clínico de Diagnóstico de Adecuación y Explicación de Choques RIISS */}
+        {dynamicConflictDiagnosis && (
+          <div className={`mb-4 p-3.5 rounded-xl border text-xs ${
+            dynamicConflictDiagnosis.success
+              ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-950 dark:text-emerald-200'
+              : dynamicConflictDiagnosis.diagnostic?.conflict
+              ? 'bg-amber-500/10 border-amber-500/30 text-amber-950 dark:text-amber-200'
+              : 'bg-surface-alt border-line text-ink'
+          }`}>
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
+              <div className="flex items-center gap-2 font-bold text-sm">
+                {dynamicConflictDiagnosis.success ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                ) : (
+                  <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                )}
+                <span>{dynamicConflictDiagnosis.diagnostic?.title || 'Adecuación de Intercambios Nutricionales'}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                {!dynamicConflictDiagnosis.success && (
+                  <button
+                    type="button"
+                    className="btn btn-2xs btn-primary text-xs"
+                    onClick={handleRecalculateAndBalanceAdequacy}
+                  >
+                    ⚡ Forzar recálculo
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="btn btn-2xs btn-outline text-xs"
+                  onClick={() => setShowConflictExplainer(!showConflictExplainer)}
+                >
+                  {showConflictExplainer ? 'Ocultar explicación clínica' : '¿Por qué no cuadran o cómo cuadran?'}
+                </button>
+              </div>
+            </div>
+
+            <p className="text-xs leading-relaxed mb-2">
+              {dynamicConflictDiagnosis.diagnostic?.description || dynamicConflictDiagnosis.diagnostic?.message}
+            </p>
+
+            {dynamicConflictDiagnosis.diagnostic?.impact && (
+              <p className="text-xs font-semibold mb-2 text-amber-800 dark:text-amber-300">
+                ⚠️ Impacto en la prescripción: {dynamicConflictDiagnosis.diagnostic.impact}
+              </p>
+            )}
+
+            {showConflictExplainer && dynamicConflictDiagnosis.diagnostic?.recommendations?.length > 0 && (
+              <div className="mt-2.5 pt-2.5 border-t border-line text-xs space-y-1.5">
+                <div className="font-bold text-ink mb-1">Recomendaciones clínicas del PAN / RIISS para cuadrar:</div>
+                <ul className="list-disc pl-4 space-y-1 text-ink">
+                  {dynamicConflictDiagnosis.diagnostic.recommendations.map((rec, rIdx) => (
+                    <li key={rIdx} className="leading-relaxed">{rec}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Resumen de Metas de Macronutrientes (Tabla derecha superior del Excel) */}
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)] mb-5">
@@ -960,6 +1089,25 @@ export default function ExchangePlanSection({ p, c, set, upd, Pill }) {
                 <td className="r text-xs text-muted num">± 100 kcal</td>
                 <td />
               </tr>
+              {isAnyMacroOutOfRange && (
+                <tr className="bg-amber-500/10 border-t border-amber-500/20">
+                  <td colSpan={7} className="p-2.5 text-xs">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-amber-800 dark:text-amber-300 font-medium flex items-center gap-1.5">
+                        <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
+                        Uno o más macronutrientes se salen del rango de adecuación estricto (95% – 105%).
+                      </span>
+                      <button
+                        type="button"
+                        className="btn btn-2xs btn-primary shadow-xs flex items-center gap-1"
+                        onClick={handleRecalculateAndBalanceAdequacy}
+                      >
+                        <Sparkles className="w-3 h-3 text-amber-300" /> Cuadrar automáticamente al 95-105%
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              )}
             </tfoot>
           </table>
         </div>
