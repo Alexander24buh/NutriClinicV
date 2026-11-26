@@ -6,7 +6,7 @@ import {
   EXCHANGE_GROUPS, MEAL_TIMES, FOOD_EXCHANGE_CATALOG, generateMealMenuFromExchanges
 } from '../data/exchangeDatabase.js';
 import {
-  COST_LEVELS, generateSalvadoranMenu, getRiissAdaptationNotes, generate7DaySalvadoranMenu, calculateWeeklyGroceryList, getQuickSubstitutionGuide
+  COST_LEVELS, generateSalvadoranMenu, getRiissAdaptationNotes, generate7DaySalvadoranMenu, calculateWeeklyGroceryList, getQuickSubstitutionGuide, cleanDecimalsToIntegers
 } from '../data/salvadoranMenuEngine.js';
 import { autoSolveExchangesToAdequacy, diagnoseExchangeConflict } from '../data/exchangeAdequacySolver.js';
 import { SALVADORAN_DISHES, DAYS_OF_WEEK } from '../data/salvadoranDishes.js';
@@ -1574,12 +1574,16 @@ export default function ExchangePlanSection({ p, c, set, upd, Pill }) {
                               Ingredientes y medidas caseras:
                             </div>
                             <div className="p-2 rounded bg-sunken text-xs space-y-1 border border-line">
-                              {meal.ingredients.map((ing, iIdx) => (
-                                <div key={iIdx} className="flex items-start justify-between gap-1 leading-snug text-ink text-[11px]">
-                                  <span>• {ing.name}</span>
-                                  <span className="font-semibold text-brand shrink-0">{ing.measure}</span>
-                                </div>
-                              ))}
+                              {meal.ingredients.map((ing, iIdx) => {
+                                const cleanNm = cleanDecimalsToIntegers(ing.name || '');
+                                const cleanMs = cleanDecimalsToIntegers(ing.measure || '');
+                                return (
+                                  <div key={iIdx} className="flex items-start justify-between gap-1 leading-snug text-ink text-[11px]">
+                                    <span>• {cleanNm}</span>
+                                    <span className="font-semibold text-brand shrink-0">{cleanMs}</span>
+                                  </div>
+                                );
+                              })}
                             </div>
                           </div>
 

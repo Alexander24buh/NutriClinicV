@@ -18,6 +18,7 @@ import {
 } from 'docx';
 import { MEAL_TIMES } from '../data/exchangeDatabase.js';
 import { DAYS_OF_WEEK, HOSPITAL_MENUS_SAN_MIGUEL, HOSPITAL_GENERAL_RECOMMENDATIONS } from '../data/salvadoranDishes.js';
+import { cleanDecimalsToIntegers } from '../data/salvadoranMenuEngine.js';
 
 const BORDER_BLACK = { style: BorderStyle.SINGLE, size: 8, color: '000000' };
 
@@ -212,10 +213,16 @@ export async function generateSalvadoranMenuDocx(patient = {}, computed = {}, we
             );
 
             dynamicMeal.ingredients.forEach(ing => {
+              const cleanMeas = cleanDecimalsToIntegers(ing.measure || '');
+              const cleanNm = cleanDecimalsToIntegers(ing.name || '');
+              const displayText = cleanNm.toLowerCase().startsWith(cleanMeas.toLowerCase()) || cleanNm.match(/^\d+/)
+                ? `• ${cleanNm}`
+                : `• ${cleanMeas} de ${cleanNm}`;
+
               cellParagraphs.push(
                 new Paragraph({
                   spacing: { after: 15 },
-                  children: [new TextRun({ text: `• ${ing.measure} de ${ing.name}`, size: 14, font: 'Arial' })]
+                  children: [new TextRun({ text: displayText, size: 14, font: 'Arial' })]
                 })
               );
             });

@@ -78,6 +78,75 @@ export function filterDishesByClinicalCondition(dishes, rissData = {}) {
   });
 }
 
+// Limpia cualquier residuo de decimales para que las porciones siempre se expresen en números enteros (1, 2, 3...)
+export function cleanDecimalsToIntegers(text) {
+  if (!text || typeof text !== 'string') return text;
+  let res = text
+    .replace(/(\d+)\.\d+\s*(taza|cda|cucharada|cdta|cucharadita|onza|oz|unidad|porcion|porción|rebanada|huevo|tortilla)s?/gi, (match, p1, p2) => {
+      const n = Math.max(1, Math.round(parseFloat(match)));
+      const base = p2.toLowerCase().replace(/s$/, '');
+      if (n === 1) return `1 ${base}`;
+      return `${n} ${base}s`;
+    })
+    .replace(/\b0\.75\s*tazas?\b/gi, '1 taza')
+    .replace(/\b0\.50?\s*tazas?\b/gi, '1 taza')
+    .replace(/\b0\.33\s*tazas?\b/gi, '1 taza')
+    .replace(/\b0\.66\s*tazas?\b/gi, '1 taza')
+    .replace(/\b1\.50?\s*tazas?\b/gi, '2 tazas')
+    .replace(/\b2\.50?\s*tazas?\b/gi, '3 tazas')
+    .replace(/\b0\.75\b/g, '1')
+    .replace(/\b0\.50?\b/g, '1')
+    .replace(/\b0\.33\b/g, '1')
+    .replace(/\b0\.66\b/g, '1')
+    .replace(/\b0\.25\b/g, '1')
+    .replace(/\b1\.50?\b/g, '2')
+    .replace(/\b2\.50?\b/g, '3')
+    .replace(/\b3\.50?\b/g, '4')
+    .replace(/\b4\.50?\b/g, '5')
+    .replace(/(\d+)\.0+\b/g, '$1')
+    .replace(/\b1\s+tazas\b/gi, '1 taza')
+    .replace(/\b1\s+cucharadas\b/gi, '1 cucharada')
+    .replace(/\b1\s+cucharaditas\b/gi, '1 cucharadita')
+    .replace(/\b1\s+onzas\b/gi, '1 onza')
+    .replace(/\b1\s+unidades\b/gi, '1 unidad')
+    .replace(/\b1\s+rebanadas\b/gi, '1 rebanada')
+    .replace(/\b1\s+tortillas\b/gi, '1 tortilla')
+    .replace(/\b1\s+huevos\b/gi, '1 huevo')
+    .replace(/\b1\s+porciones\b/gi, '1 porción');
+  return res;
+}
+
+// Formatea cantidades a números enteros con la unidad gramatical correcta
+export function toIntegerMeasure(qty, unit = '') {
+  const rounded = Math.max(1, Math.round(Number(qty) || 1));
+  const u = (unit || '').trim().toLowerCase();
+  if (!u) return `${rounded}`;
+
+  if (rounded === 1) {
+    if (u.startsWith('taza')) return '1 taza';
+    if (u.startsWith('cda') || u.startsWith('cucharada')) return '1 cucharada';
+    if (u.startsWith('cdta') || u.startsWith('cucharadita')) return '1 cucharadita';
+    if (u.startsWith('onza') || u.startsWith('oz')) return '1 onza (30 g)';
+    if (u.startsWith('unidad')) return '1 unidad';
+    if (u.startsWith('rebanada')) return '1 rebanada';
+    if (u.startsWith('tortilla')) return '1 tortilla';
+    if (u.startsWith('huevo')) return '1 huevo';
+    if (u.startsWith('porcion') || u.startsWith('porción')) return '1 porción';
+    return `1 ${u.replace(/s$/, '')}`;
+  }
+
+  if (u.startsWith('taza')) return `${rounded} tazas`;
+  if (u.startsWith('cda') || u.startsWith('cucharada')) return `${rounded} cucharadas`;
+  if (u.startsWith('cdta') || u.startsWith('cucharadita')) return `${rounded} cucharaditas`;
+  if (u.startsWith('onza') || u.startsWith('oz')) return `${rounded} onzas (${rounded * 30} g)`;
+  if (u.startsWith('unidad')) return `${rounded} unidades`;
+  if (u.startsWith('rebanada')) return `${rounded} rebanadas`;
+  if (u.startsWith('tortilla')) return `${rounded} tortillas`;
+  if (u.startsWith('huevo')) return `${rounded} huevos`;
+  if (u.startsWith('porcion') || u.startsWith('porción')) return `${rounded} porciones`;
+  return `${rounded} ${u.endsWith('s') ? u : u + 's'}`;
+}
+
 // Escala dinámicamente un platillo salvadoreño para que coincida exactamente con los intercambios asignados a un tiempo de comida
 export function scaleDishToMealExchanges(dish, mealExchanges = {}, options = {}) {
   if (!dish) return null;
@@ -105,16 +174,14 @@ export function scaleDishToMealExchanges(dish, mealExchanges = {}, options = {})
 
   const scaledIngredients = [];
 
-  // 1. Escalar Almidones (tortillas, frijoles, plátano, arroz, yuca, papas)
+  // 1. Escalar Almidones (tortillas, frijoles, plátano, arroz, yuca, papas) - estrictamente en enteros
   const baseAlmIngs = dish.ingredients.filter(ing => ing.exchangeGroup === 'almidones');
   if (targetAlm > 0) {
     if (baseAlmIngs.length === 1) {
       const ing = baseAlmIngs[0];
-      const scaledQty = ing.baseQty * (targetAlm / (ing.exchanges || 1));
-      let displayUnit = ing.unit;
+      const count = Math.max(1, Math.round(targetAlm));
       if (ing.name.toLowerCase().includes('tortilla')) {
-        const count = Math.max(1, Math.round(targetAlm));
-        displayUnit = count === 1 ? 'tortilla caliente' : 'tortillas calientes del comal';
+        const displayUnit = count === 1 ? 'tortilla caliente' : 'tortillas calientes del comal';
         scaledIngredients.push({
           name: `${count} ${displayUnit} de maíz nixtamalizado`,
           measure: `${count} unidad(es)`,
@@ -126,9 +193,10 @@ export function scaleDishToMealExchanges(dish, mealExchanges = {}, options = {})
           kcal: targetAlm * 80
         });
       } else {
+        const cleanName = cleanDecimalsToIntegers(ing.name);
         scaledIngredients.push({
-          name: ing.name,
-          measure: `${scaledQty.toFixed(scaledQty % 1 === 0 ? 0 : 2)} ${displayUnit}`,
+          name: cleanName,
+          measure: toIntegerMeasure(count, ing.unit),
           group: 'almidones',
           exchanges: targetAlm,
           cho: targetAlm * 15,
@@ -138,9 +206,7 @@ export function scaleDishToMealExchanges(dish, mealExchanges = {}, options = {})
         });
       }
     } else if (baseAlmIngs.length > 1) {
-      // Repartir proporcionalmente los almidones entre los componentes del plato
-      let remAlm = targetAlm;
-      // Asignar al menos 1 intercambio a tortillas si existen, y el resto a legumbres/arroz/tubérculos
+      let remAlm = Math.max(1, Math.round(targetAlm));
       const hasTortilla = baseAlmIngs.find(i => i.name.toLowerCase().includes('tortilla'));
       const otherAlms = baseAlmIngs.filter(i => !i.name.toLowerCase().includes('tortilla'));
 
@@ -160,12 +226,12 @@ export function scaleDishToMealExchanges(dish, mealExchanges = {}, options = {})
       }
 
       if (otherAlms.length > 0 && remAlm > 0) {
-        const portionEach = remAlm / otherAlms.length;
+        const portionEach = Math.max(1, Math.round(remAlm / otherAlms.length));
         otherAlms.forEach(ing => {
-          const qty = ing.baseQty * (portionEach / (ing.exchanges || 1));
+          const cleanName = cleanDecimalsToIntegers(ing.name);
           scaledIngredients.push({
-            name: ing.name,
-            measure: `${qty.toFixed(qty % 1 === 0 ? 0 : 2)} ${ing.unit}`,
+            name: cleanName,
+            measure: toIntegerMeasure(portionEach, ing.unit),
             group: 'almidones',
             exchanges: portionEach,
             cho: portionEach * 15,
@@ -176,10 +242,10 @@ export function scaleDishToMealExchanges(dish, mealExchanges = {}, options = {})
         });
       }
     } else {
-      // El plato base no tenía almidón explícito, añadir tortilla de maíz o frijol
+      const count = Math.max(1, Math.round(targetAlm));
       scaledIngredients.push({
-        name: `${targetAlm} tortilla(s) de maíz nixtamalizado del comal (o arroz al vapor)`,
-        measure: `${targetAlm} unidad(es)`,
+        name: `${count} tortilla(s) de maíz nixtamalizado del comal`,
+        measure: `${count} unidad(es)`,
         group: 'almidones',
         exchanges: targetAlm,
         cho: targetAlm * 15,
@@ -190,19 +256,19 @@ export function scaleDishToMealExchanges(dish, mealExchanges = {}, options = {})
     }
   }
 
-  // 2. Escalar Proteínas (pollo, res, pescado, huevo, quesillo/cuajada)
+  // 2. Escalar Proteínas (pollo, res, pescado, huevo, quesillo/cuajada) - estrictamente en enteros
   const baseProtIngs = dish.ingredients.filter(ing => ['prot_magra', 'prot_sm', 'prot_grasa'].includes(ing.exchangeGroup));
   if (totalTargetProt > 0) {
+    const intTargetOz = Math.max(1, Math.round(totalTargetProt));
     if (baseProtIngs.length > 0) {
       const primaryProt = baseProtIngs[0];
-      const targetOz = totalTargetProt;
       const isEgg = primaryProt.name.toLowerCase().includes('huevo') || primaryProt.unit.includes('unidad');
       const measureStr = isEgg
-        ? `${Math.round(targetOz)} huevo(s) entero(s) o claras revueltas`
-        : `${(targetOz * 30).toFixed(0)} g (${targetOz.toFixed(1)} oz)`;
+        ? `${intTargetOz} huevo(s) entero(s) o claras revueltas`
+        : `${intTargetOz * 30} g (${intTargetOz} oz)`;
 
       scaledIngredients.push({
-        name: primaryProt.name,
+        name: cleanDecimalsToIntegers(primaryProt.name),
         measure: measureStr,
         group: primaryProt.exchangeGroup,
         exchanges: totalTargetProt,
@@ -214,7 +280,7 @@ export function scaleDishToMealExchanges(dish, mealExchanges = {}, options = {})
     } else {
       scaledIngredients.push({
         name: 'Proteína salvadoreña (pechuga de pollo desgrasada, huevo o queso fresco)',
-        measure: `${(totalTargetProt * 30).toFixed(0)} g (${totalTargetProt} oz)`,
+        measure: `${intTargetOz * 30} g (${intTargetOz} oz)`,
         group: 'prot_magra',
         exchanges: totalTargetProt,
         cho: 0,
@@ -225,14 +291,14 @@ export function scaleDishToMealExchanges(dish, mealExchanges = {}, options = {})
     }
   }
 
-  // 3. Escalar Vegetales sin Almidón (chirimol, ensalada criolla, curtido, güisquil, pipián)
+  // 3. Escalar Vegetales sin Almidón (chirimol, ensalada criolla, curtido, güisquil, pipián) - enteros
   if (targetVeg > 0) {
     const baseVeg = dish.ingredients.find(i => i.exchangeGroup === 'veg_sa');
-    const vegName = baseVeg ? baseVeg.name : 'Verduras criollas (güisquil, pipián, tomate, pepino y rábano con limón)';
-    const cups = targetVeg === 1 ? '1 taza' : `${targetVeg} tazas`;
+    const vegName = baseVeg ? cleanDecimalsToIntegers(baseVeg.name) : 'Verduras criollas (güisquil, pipián, tomate, pepino y rábano con limón)';
+    const intCups = Math.max(1, Math.round(targetVeg));
     scaledIngredients.push({
       name: vegName,
-      measure: `${cups} fresca(s) o al vapor`,
+      measure: toIntegerMeasure(intCups, 'taza'),
       group: 'veg_sa',
       exchanges: targetVeg,
       cho: targetVeg * 5,
@@ -242,13 +308,14 @@ export function scaleDishToMealExchanges(dish, mealExchanges = {}, options = {})
     });
   }
 
-  // 4. Escalar Frutas (papaya, sandía, piña, manzana criolla, melón)
+  // 4. Escalar Frutas (papaya, sandía, piña, manzana criolla, melón) - enteros
   if (targetFruta > 0) {
     const baseFruta = dish.ingredients.find(i => i.exchangeGroup === 'frutas');
-    const frutaName = baseFruta ? baseFruta.name : 'Fruta salvadoreña fresca de temporada (papaya, piña, melón o sandía)';
+    const frutaName = baseFruta ? cleanDecimalsToIntegers(baseFruta.name) : 'Fruta salvadoreña fresca de temporada (papaya, piña, melón o sandía)';
+    const intPortions = Math.max(1, Math.round(targetFruta));
     scaledIngredients.push({
       name: frutaName,
-      measure: `${targetFruta} porción(es) fresca(s) picada(s)`,
+      measure: toIntegerMeasure(intPortions, 'porción'),
       group: 'frutas',
       exchanges: targetFruta,
       cho: targetFruta * 15,
@@ -258,25 +325,26 @@ export function scaleDishToMealExchanges(dish, mealExchanges = {}, options = {})
     });
   }
 
-  // 5. Escalar Grasas Saludables (aguacate criollo, aceite de oliva/vegetal, semillas de ayote)
+  // 5. Escalar Grasas Saludables (aguacate criollo, aceite de oliva/vegetal, semillas de ayote) - enteros
   if (targetGrasa > 0) {
     const baseGrasa = dish.ingredients.find(i => i.exchangeGroup === 'grasas');
-    let grasaDesc = '1 cdta de aceite vegetal para cocción';
-    if (targetGrasa === 1) {
-      grasaDesc = baseGrasa ? baseGrasa.name : '2 Cdas (30 g / 1 oz) de aguacate criollo fresco o 1 cdta de aceite';
-    } else if (targetGrasa === 2) {
-      grasaDesc = '2 Cdas de aguacate criollo (1 grasa) + 1 cdta de aceite de oliva en cocción (1 grasa)';
+    const intGrasa = Math.max(1, Math.round(targetGrasa));
+    let grasaDesc = '1 cucharadita de aceite vegetal para cocción';
+    if (intGrasa === 1) {
+      grasaDesc = baseGrasa ? cleanDecimalsToIntegers(baseGrasa.name) : '2 cucharadas de aguacate criollo fresco o 1 cucharadita de aceite';
+    } else if (intGrasa === 2) {
+      grasaDesc = '2 cucharadas de aguacate criollo + 1 cucharadita de aceite de oliva en cocción';
     } else {
-      grasaDesc = `2 Cdas de aguacate criollo + ${targetGrasa - 1} cdta(s) de aceite vegetal medido`;
+      grasaDesc = `2 cucharadas de aguacate criollo + ${intGrasa - 1} cucharaditas de aceite vegetal medido`;
     }
 
     if (isLowK && grasaDesc.includes('aguacate')) {
-      grasaDesc = `${targetGrasa} cdta(s) de aceite de oliva/vegetal para cocción (Aviso RIISS: aguacate omitido por potasio)`;
+      grasaDesc = `${intGrasa} cucharadita(s) de aceite de oliva/vegetal para cocción (Aviso RIISS: aguacate omitido por potasio)`;
     }
 
     scaledIngredients.push({
       name: 'Grasa cardiosaludable (medida)',
-      measure: grasaDesc,
+      measure: cleanDecimalsToIntegers(grasaDesc),
       group: 'grasas',
       exchanges: targetGrasa,
       cho: 0,
@@ -286,11 +354,12 @@ export function scaleDishToMealExchanges(dish, mealExchanges = {}, options = {})
     });
   }
 
-  // 6. Escalar Lácteos (leche descremada, bebida caliente)
+  // 6. Escalar Lácteos (leche descremada, bebida caliente) - enteros
   if (targetLacteo > 0) {
+    const intCups = Math.max(1, Math.round(targetLacteo));
     scaledIngredients.push({
       name: 'Bebida láctea (leche descremada o yogur natural sin grasa)',
-      measure: `${targetLacteo} taza(s) (8 oz)`,
+      measure: `${intCups} taza(s) (8 oz)`,
       group: 'leche_dc',
       exchanges: targetLacteo,
       cho: targetLacteo * 12,
@@ -300,11 +369,12 @@ export function scaleDishToMealExchanges(dish, mealExchanges = {}, options = {})
     });
   }
 
-  // 7. Otros Carbohidratos (Azúcares o miel)
+  // 7. Otros Carbohidratos (Azúcares o miel) - enteros
   if (targetOtrosCho > 0) {
+    const intCdas = Math.max(1, Math.round(targetOtrosCho));
     scaledIngredients.push({
       name: 'Miel de panela pura o dulce tradicional medido',
-      measure: `${targetOtrosCho} Cda(s) rasa(s)`,
+      measure: toIntegerMeasure(intCdas, 'cucharada'),
       group: 'otros_cho',
       exchanges: targetOtrosCho,
       cho: targetOtrosCho * 15,
