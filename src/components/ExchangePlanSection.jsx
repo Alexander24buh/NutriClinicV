@@ -1,6 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
-  Calculator, Utensils, BookOpen, Sparkles, RefreshCw, Check, Search, ChevronDown, ChevronUp, ArrowRight, ShieldCheck, DollarSign, AlertCircle, Clock, Pill as PillIcon, Calendar, Download, ShoppingCart, Shuffle, FileText, CheckCircle2, ListOrdered, X
+  Calculator, Utensils, BookOpen, Sparkles, RefreshCw, Check, Search, ChevronDown, ChevronUp, ArrowRight, ShieldCheck, DollarSign, AlertCircle, Clock, Pill as PillIcon, Calendar, Download, ShoppingCart, Shuffle, FileText, CheckCircle2, ListOrdered, X, Bot, Lock, LogIn, LogOut, AlertTriangle
 } from 'lucide-react';
 import {
   EXCHANGE_GROUPS, MEAL_TIMES, FOOD_EXCHANGE_CATALOG, generateMealMenuFromExchanges
@@ -11,6 +11,14 @@ import {
 import { autoSolveExchangesToAdequacy, diagnoseExchangeConflict } from '../data/exchangeAdequacySolver.js';
 import { SALVADORAN_DISHES, DAYS_OF_WEEK } from '../data/salvadoranDishes.js';
 import { downloadSalvadoranMenuDocx } from '../lib/salvadoranDocxExport.js';
+import {
+  getAuthSession,
+  getMonthlyAiUsage,
+  onAuthStateChange,
+  signInWithEmail,
+  signUpWithEmail,
+  signOutUser
+} from '../lib/supabase.js';
 import RissDietCard from './RissDietCard.jsx';
 
 const num = v => {
@@ -75,6 +83,198 @@ export default function ExchangePlanSection({ p, c, set, upd, Pill }) {
   // Diagnóstico y resolución de adecuación clínica (95% - 105%)
   const [adequacyDiagnostic, setAdequacyDiagnostic] = useState(null);
   const [showConflictExplainer, setShowConflictExplainer] = useState(false);
+
+  // Estados para Personalización de Menú con IA (Google Gemini) y límite de usos en Supabase
+  const [isAiModalOpen, setIsAiModalOpen] = useState(false);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [authSession, setAuthSession] = useState(null);
+  const [aiUsage, setAiUsage] = useState({ usos_actuales: 0, limite_mensual: 20, usos_restantes: 20, periodo: '' });
+  const [aiUsageLoading, setAiUsageLoading] = useState(true);
+  const [isAiLoading, setIsAiLoading] = useState(false);
+  const [aiError, setAiError] = useState(null);
+  const [aiSuccessMessage, setAiSuccessMessage] = useState(null);
+  const [aiResultMenu, setAiResultMenu] = useState('');
+  const [aiMealTimeTarget, setAiMealTimeTarget] = useState('all');
+  const [aiCustomNotes, setAiCustomNotes] = useState('');
+
+  // Formulario de autenticación en Supabase
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [authMode, setAuthMode] = useState('signin'); // 'signin' | 'signup'
+  const [authLoading, setAuthLoading] = useState(false);
+  const [authError, setAuthError] = useState('');
+  const [authSuccess, setAuthSuccess] = useState('');
+
+  useEffect(() => {
+    let isMounted = true;
+    const initAuth = async () => {
+      try {
+        const session = await getAuthSession();
+        if (!isMounted) return;
+        setAuthSession(session);
+        if (session) {
+          const usage = await getMonthlyAiUsage();
+          if (isMounted && usage.success) {
+            setAiUsage(usage);
+          }
+        }
+      } catch (err) {
+        console.warn('Error inicializando auth/usage:', err);
+      } finally {
+        if (isMounted) setAiUsageLoading(false);
+      }
+    };
+    initAuth();
+
+    const sub = onAuthStateChange(async (_event, session) => {
+      if (!isMounted) return;
+      setAuthSession(session);
+      if (session) {
+        setAiUsageLoading(true);
+        const usage = await getMonthlyAiUsage();
+        if (isMounted && usage.success) {
+          setAiUsage(usage);
+        }
+        setAiUsageLoading(false);
+      } else {
+        setAiUsage({ usos_actuales: 0, limite_mensual: 20, usos_restantes: 0, periodo: '' });
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      if (sub && typeof sub.unsubscribe === 'function') {
+        sub.unsubscribe();
+      }
+    };
+  }, []);
+
+  const handleAuthSubmit = async (e) => {
+    if (e) e.preventDefault();
+    setAuthError('');
+    setAuthSuccess('');
+    if (!authEmail || !authPassword) {
+      setAuthError('Por favor ingresa correo y contraseña.');
+      return;
+    }
+    setAuthLoading(true);
+    try {
+      if (authMode === 'signup') {
+        const res = await signUpWithEmail(authEmail, authPassword);
+        if (!res.success) throw new Error(res.error);
+        setAuthSuccess('¡Cuenta creada exitosamente! Revisa tu correo o inicia sesión.');
+        setAuthMode('signin');
+      } else {
+        const res = await signInWithEmail(authEmail, authPassword);
+        if (!res.success) throw new Error(res.error);
+        setAuthSession(res.session);
+        setAuthSuccess('¡Sesión iniciada correctamente!');
+        const usage = await getMonthlyAiUsage();
+        if (usage.success) setAiUsage(usage);
+        setTimeout(() => {
+          setIsAuthModalOpen(false);
+          setAuthSuccess('');
+        }, 800);
+      }
+    } catch (err) {
+      setAuthError(err.message || 'Error en la autenticación con Supabase.');
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleSignOut = async () => {
+    await signOutUser();
+    setAuthSession(null);
+    setAiUsage({ usos_actuales: 0, limite_mensual: 20, usos_restantes: 0, periodo: '' });
+  };
+
+  const handlePersonalizeWithAi = async () => {
+    setAiError(null);
+    setAiSuccessMessage(null);
+
+    const session = await getAuthSession();
+    if (!session?.access_token) {
+      setIsAuthModalOpen(true);
+      return;
+    }
+
+    if (aiUsage.usos_restantes <= 0 && aiUsage.limite_mensual > 0) {
+      setAiError('Has alcanzado tu límite mensual de personalizaciones con IA (20/20). Tu cuota se renovará el primer día del próximo mes.');
+      return;
+    }
+
+    setIsAiLoading(true);
+
+    try {
+      const mealName = aiMealTimeTarget === 'all'
+        ? ''
+        : MEAL_TIMES.find(m => m.k === aiMealTimeTarget)?.n || aiMealTimeTarget;
+
+      const response = await fetch('/api/personalizar-menu', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({
+          patient: p,
+          computed: c,
+          exchanges: p.plan.eq,
+          mealTime: mealName,
+          rissData,
+          customInstructions: aiCustomNotes
+        })
+      });
+
+      const data = await response.json();
+
+      if (response.status === 429) {
+        setAiError(data.error || 'Has alcanzado tu límite mensual de personalizaciones con IA.');
+        setAiUsage(prev => ({
+          ...prev,
+          usos_actuales: data.usos_actuales ?? prev.limite_mensual,
+          usos_restantes: 0
+        }));
+        return;
+      }
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          setAiError('Tu sesión ha expirado o no es válida. Por favor inicia sesión nuevamente.');
+          setIsAuthModalOpen(true);
+          return;
+        }
+        throw new Error(data.error || `Error del servidor (${response.status})`);
+      }
+
+      setAiResultMenu(data.menuPersonalizado);
+      setAiUsage({
+        usos_actuales: data.usos_actuales,
+        limite_mensual: data.limite_mensual,
+        usos_restantes: data.usos_restantes,
+        periodo: data.periodo
+      });
+      setAiSuccessMessage(`¡Menú generado con éxito! Te quedan ${data.usos_restantes} de ${data.limite_mensual} usos este mes.`);
+    } catch (err) {
+      console.error('Error llamando a /api/personalizar-menu:', err);
+      setAiError(err.message || 'Error de conexión con el servicio de Inteligencia Artificial.');
+    } finally {
+      setIsAiLoading(false);
+    }
+  };
+
+  const handleApplyAiMenu = () => {
+    if (!aiResultMenu) return;
+    if (aiMealTimeTarget !== 'all') {
+      set('plan.menu.' + aiMealTimeTarget, aiResultMenu);
+    } else {
+      const currentObs = p.plan?.menu?.observaciones || '';
+      const separator = currentObs ? '\n\n--- MENÚ PERSONALIZADO CON IA ---\n' : '';
+      set('plan.menu.observaciones', currentObs + separator + aiResultMenu);
+    }
+    setIsAiModalOpen(false);
+  };
 
   const snackConfig = p.plan?.snackConfig || 'both';
 
@@ -1379,16 +1579,76 @@ export default function ExchangePlanSection({ p, c, set, upd, Pill }) {
             {/* Botón de Exportación a Google Docs (.docx) */}
             <button
               type="button"
-              className="btn btn-primary btn-sm shadow-xs flex items-center gap-1.5"
+              className="btn btn-outline btn-sm shadow-xs flex items-center gap-1.5"
               onClick={handleExportGoogleDocs}
               disabled={isExportingDocx}
               title="Descargar documento .docx completamente editable y compatible con Google Docs"
             >
               <Download className={`w-4 h-4 ${isExportingDocx ? 'animate-spin' : ''}`} />
-              {isExportingDocx ? 'Generando documento...' : 'Exportar Menú de 7 Días a Google Docs'}
+              {isExportingDocx ? 'Generando...' : 'Exportar Docx'}
             </button>
+
+            {/* Botón Personalizar menú con IA */}
+            <button
+              type="button"
+              className="btn btn-sm shadow-xs flex items-center gap-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={() => {
+                if (!authSession) {
+                  setIsAuthModalOpen(true);
+                } else {
+                  setIsAiModalOpen(true);
+                }
+              }}
+              disabled={isAiLoading || (authSession && aiUsage.usos_restantes <= 0)}
+              title={
+                !authSession
+                  ? 'Inicia sesión en Supabase para acceder a la IA'
+                  : aiUsage.usos_restantes <= 0
+                  ? 'Has alcanzado tu límite mensual de personalizaciones con IA (0 restantes)'
+                  : 'Personalizar menú con Inteligencia Artificial (Google Gemini)'
+              }
+            >
+              <Sparkles className={`w-4 h-4 text-amber-300 ${isAiLoading ? 'animate-spin' : ''}`} />
+              <span>{isAiLoading ? 'Procesando...' : 'Personalizar menú con IA'}</span>
+            </button>
+
+            {/* Indicador discreto de usos disponibles este mes */}
+            <div
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-all ${
+                !authSession
+                  ? 'bg-sunken border-line text-muted cursor-pointer hover:border-brand'
+                  : aiUsage.usos_restantes <= 0
+                  ? 'bg-crit-soft border-crit/30 text-crit font-bold'
+                  : aiUsage.usos_restantes <= 3
+                  ? 'bg-warn-soft border-warn/30 text-warn font-semibold'
+                  : 'bg-purple-500/10 border-purple-500/20 text-purple-700 dark:text-purple-300'
+              }`}
+              onClick={() => {
+                if (!authSession) setIsAuthModalOpen(true);
+              }}
+              title={!authSession ? 'Haz clic para iniciar sesión en Supabase' : `Período: ${aiUsage.periodo || 'este mes'}`}
+            >
+              <Bot className="w-3.5 h-3.5" />
+              <span>
+                {aiUsageLoading
+                  ? 'Consultando usos...'
+                  : !authSession
+                  ? 'Iniciar sesión (20 usos/mes)'
+                  : `${aiUsage.usos_restantes} / ${aiUsage.limite_mensual} usos de IA disponibles este mes`}
+              </span>
+            </div>
           </div>
         </div>
+
+        {/* Aviso amigable si se alcanzó el límite mensual de usos */}
+        {authSession && aiUsage.usos_restantes <= 0 && (
+          <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-xs flex items-start gap-2.5 text-amber-800 dark:text-amber-300">
+            <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+            <div>
+              <span className="font-bold">Límite mensual alcanzado:</span> Has alcanzado tu límite mensual de <strong>{aiUsage.limite_mensual} personalizaciones con IA</strong> ({aiUsage.periodo}). Tu cuota se reiniciará automáticamente al inicio del próximo mes.
+            </div>
+          </div>
+        )}
 
         {/* 1. Selector de Nivel de Costo (Económico, Regular, Más Costoso) y Regenerar */}
         <div className="mb-4 p-3.5 bg-surface-alt rounded-lg border border-line">
@@ -1974,6 +2234,282 @@ export default function ExchangePlanSection({ p, c, set, upd, Pill }) {
           </div>
         )}
       </section>
+
+      {/* MODAL 1: PERSONALIZACIÓN DE MENÚ CON INTELIGENCIA ARTIFICIAL (GEMINI) */}
+      {isAiModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="card max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto shadow-2xl animate-fade-in border border-purple-500/30">
+            <div className="flex items-center justify-between pb-3 mb-4 border-b border-line">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-md bg-purple-500/10 text-purple-600 dark:text-purple-400">
+                  <Sparkles className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="h3 mb-0">Personalización de Menú con IA</h3>
+                  <p className="text-xs text-muted mb-0">Google Gemini adaptado a gastronomía salvadoreña y lineamientos RIISS</p>
+                </div>
+              </div>
+              <button
+                className="btn btn-sm p-1.5"
+                onClick={() => {
+                  setIsAiModalOpen(false);
+                  setAiError(null);
+                  setAiSuccessMessage(null);
+                }}
+                aria-label="Cerrar modal"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Fila de Usos y Estado de Usuario */}
+            <div className="p-3 mb-4 rounded-lg bg-surface-alt border border-line flex flex-wrap items-center justify-between gap-2 text-xs">
+              <div className="flex items-center gap-2">
+                <Bot className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                <span>
+                  Usuario: <strong>{authSession?.user?.email || 'Autenticado'}</strong>
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className={`px-2 py-0.5 rounded-full font-bold ${
+                  aiUsage.usos_restantes <= 0 ? 'bg-crit-soft text-crit' : 'bg-purple-100 dark:bg-purple-950 text-purple-800 dark:text-purple-300'
+                }`}>
+                  {aiUsage.usos_restantes} / {aiUsage.limite_mensual} usos disponibles este mes
+                </span>
+              </div>
+            </div>
+
+            {/* Alerta de Límite Alcanzado (429) o Error */}
+            {aiError && (
+              <div className="p-3 mb-4 rounded-lg bg-crit-soft text-crit border border-crit/30 text-xs flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-bold mb-0.5">Aviso del Sistema</p>
+                  <p className="mb-0">{aiError}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Mensaje de Éxito */}
+            {aiSuccessMessage && (
+              <div className="p-3 mb-4 rounded-lg bg-ok-soft text-ok border border-ok/30 text-xs flex items-start gap-2">
+                <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
+                <div>{aiSuccessMessage}</div>
+              </div>
+            )}
+
+            {/* Contexto del Paciente Detectado */}
+            <div className="p-3 mb-4 rounded-lg bg-sunken border border-line text-xs grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <div>
+                <span className="text-muted block text-[10px]">PACIENTE:</span>
+                <span className="font-medium text-ink">{p.name || 'Paciente Adulto'}</span>
+              </div>
+              <div>
+                <span className="text-muted block text-[10px]">DIETA HOSPITALARIA:</span>
+                <span className="font-medium text-brand">{rissData?.nombre || 'Dieta General'}</span>
+              </div>
+              <div>
+                <span className="text-muted block text-[10px]">REQUERIMIENTO:</span>
+                <span className="font-medium text-ink">{Math.round(c.vct || 2000)} kcal</span>
+              </div>
+              <div>
+                <span className="text-muted block text-[10px]">ALERGIAS:</span>
+                <span className="font-medium text-ink">{p.allergies || 'Ninguna'}</span>
+              </div>
+            </div>
+
+            {/* Configuración de la Generación */}
+            <div className="space-y-3 mb-4">
+              <div>
+                <label className="block text-xs font-bold text-ink mb-1">
+                  Tiempo de comida a personalizar:
+                </label>
+                <select
+                  className="inp text-xs w-full"
+                  value={aiMealTimeTarget}
+                  onChange={e => setAiMealTimeTarget(e.target.value)}
+                  disabled={isAiLoading}
+                >
+                  <option value="all">Todo el menú diario (5 tiempos)</option>
+                  {MEAL_TIMES.filter(mt => isMealActive(mt.k)).map(mt => (
+                    <option key={mt.k} value={mt.k}>{mt.n}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-ink mb-1">
+                  Instrucciones o preferencias específicas (Opcional):
+                </label>
+                <textarea
+                  className="inp text-xs w-full h-20 resize-none"
+                  placeholder="Ej: Prefiere plátano en vez de pan francés, preparación para llevar al trabajo, económico, etc..."
+                  value={aiCustomNotes}
+                  onChange={e => setAiCustomNotes(e.target.value)}
+                  disabled={isAiLoading}
+                />
+              </div>
+            </div>
+
+            {/* Resultado Generado por la IA */}
+            {aiResultMenu && (
+              <div className="mb-4 p-4 rounded-lg bg-surface border border-purple-500/30">
+                <div className="flex items-center justify-between mb-2 pb-2 border-b border-line">
+                  <span className="text-xs font-bold text-purple-700 dark:text-purple-300 flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5" /> Propuesta Personalizada por IA:
+                  </span>
+                  <button
+                    type="button"
+                    className="btn btn-xs btn-outline text-[11px]"
+                    onClick={() => {
+                      navigator.clipboard.writeText(aiResultMenu);
+                      alert('¡Menú copiado al portapapeles!');
+                    }}
+                  >
+                    Copiar
+                  </button>
+                </div>
+                <div className="text-xs text-ink whitespace-pre-wrap leading-relaxed max-h-56 overflow-y-auto p-2 bg-sunken rounded">
+                  {aiResultMenu}
+                </div>
+                <div className="mt-3 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-primary text-xs"
+                    onClick={handleApplyAiMenu}
+                  >
+                    <Check className="w-3.5 h-3.5" /> Aplicar al Plan del Paciente
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Botones de Acción */}
+            <div className="flex items-center justify-between pt-3 border-t border-line">
+              <button
+                type="button"
+                className="btn btn-sm"
+                onClick={() => setIsAiModalOpen(false)}
+                disabled={isAiLoading}
+              >
+                Cerrar
+              </button>
+              <button
+                type="button"
+                className="btn btn-sm bg-purple-600 hover:bg-purple-700 text-white font-bold flex items-center gap-1.5 shadow-xs disabled:opacity-50 disabled:cursor-not-allowed"
+                onClick={handlePersonalizeWithAi}
+                disabled={isAiLoading || aiUsage.usos_restantes <= 0}
+              >
+                <Sparkles className={`w-3.5 h-3.5 text-amber-300 ${isAiLoading ? 'animate-spin' : ''}`} />
+                <span>{isAiLoading ? 'Generando menú con IA...' : 'Generar Personalización'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 2: AUTENTICACIÓN EN SUPABASE (INICIAR SESIÓN / REGISTRARSE) */}
+      {isAuthModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="card max-w-md w-full p-6 shadow-2xl animate-fade-in border border-line">
+            <div className="flex items-center justify-between pb-3 mb-4 border-b border-line">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-md bg-brand/10 text-brand">
+                  <Lock className="w-5 h-5" />
+                </div>
+                <h3 className="h3 mb-0">Autenticación Supabase</h3>
+              </div>
+              <button className="btn btn-sm p-1.5" onClick={() => setIsAuthModalOpen(false)} aria-label="Cerrar modal">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-muted mb-4">
+              Inicia sesión o regístrate para activar tu límite de <strong>20 personalizaciones con IA mensuales</strong> y proteger tus costos.
+            </p>
+
+            {authSession ? (
+              <div className="space-y-4">
+                <div className="p-3 rounded-lg bg-surface-alt border border-line text-xs">
+                  <p className="text-muted mb-1 text-[11px]">Sesión activa como:</p>
+                  <p className="font-bold text-ink text-sm">{authSession.user?.email}</p>
+                  <div className="mt-2 pt-2 border-t border-line flex items-center justify-between">
+                    <span>Usos este mes:</span>
+                    <span className="font-bold text-brand">{aiUsage.usos_restantes} / {aiUsage.limite_mensual} restantes</span>
+                  </div>
+                </div>
+                <div className="flex justify-between items-center pt-2">
+                  <button className="btn btn-sm" onClick={() => setIsAuthModalOpen(false)}>Cerrar</button>
+                  <button className="btn btn-sm btn-outline text-crit border-crit/30 flex items-center gap-1" onClick={handleSignOut}>
+                    <LogOut className="w-3.5 h-3.5" /> Cerrar sesión
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <form onSubmit={handleAuthSubmit} className="space-y-3">
+                {authError && (
+                  <div className="p-2.5 rounded bg-crit-soft text-crit text-xs border border-crit/30">
+                    {authError}
+                  </div>
+                )}
+                {authSuccess && (
+                  <div className="p-2.5 rounded bg-ok-soft text-ok text-xs border border-ok/30">
+                    {authSuccess}
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-xs font-semibold text-ink mb-1">Correo electrónico:</label>
+                  <input
+                    type="email"
+                    className="inp text-xs w-full"
+                    placeholder="nutriologo@clinica.com"
+                    value={authEmail}
+                    onChange={e => setAuthEmail(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-ink mb-1">Contraseña:</label>
+                  <input
+                    type="password"
+                    className="inp text-xs w-full"
+                    placeholder="••••••••"
+                    value={authPassword}
+                    onChange={e => setAuthPassword(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div className="pt-2 flex flex-col gap-2">
+                  <button
+                    type="submit"
+                    className="btn btn-primary btn-sm w-full font-bold justify-center"
+                    disabled={authLoading}
+                  >
+                    {authLoading ? 'Procesando...' : authMode === 'signin' ? 'Iniciar Sesión' : 'Crear Cuenta'}
+                  </button>
+
+                  <button
+                    type="button"
+                    className="text-xs text-muted hover:text-brand text-center underline pt-1"
+                    onClick={() => {
+                      setAuthMode(authMode === 'signin' ? 'signup' : 'signin');
+                      setAuthError('');
+                      setAuthSuccess('');
+                    }}
+                  >
+                    {authMode === 'signin'
+                      ? '¿No tienes cuenta? Regístrate aquí'
+                      : '¿Ya tienes cuenta? Inicia sesión'}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

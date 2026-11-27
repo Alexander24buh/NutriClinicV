@@ -6,7 +6,8 @@ import {
 } from 'lucide-react';
 import {
   getCloudConfig, saveCloudConfig, isCloudConfigured, testCloudConnection,
-  savePatientToCloud, syncAllPatientsToCloud, fetchAllPatientsFromCloud, SQL_SETUP_SCRIPT
+  savePatientToCloud, syncAllPatientsToCloud, fetchAllPatientsFromCloud, SQL_SETUP_SCRIPT,
+  getAuthSession, getMonthlyAiUsage, signInWithEmail, signUpWithEmail, signOutUser
 } from './lib/supabase.js';
 import {
   EXCHANGE_GROUPS, MEAL_TIMES, generateMealMenuFromExchanges
@@ -2889,6 +2890,67 @@ function CloudModal({ isOpen, onClose, patients, onPatientsUpdated }) {
   const [showSql, setShowSql] = useState(false);
   const [copiedSql, setCopiedSql] = useState(false);
 
+  // Estados de sesión Supabase y cuota IA
+  const [userSession, setUserSession] = useState(null);
+  const [aiUsage, setAiUsage] = useState({ usos_actuales: 0, limite_mensual: 20, usos_restantes: 20 });
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [authBusy, setAuthBusy] = useState(false);
+  const [authMsg, setAuthMsg] = useState('');
+  const [authErr, setAuthErr] = useState('');
+
+  useEffect(() => {
+    if (!isOpen) return;
+    let active = true;
+    const loadSession = async () => {
+      const sess = await getAuthSession();
+      if (!active) return;
+      setUserSession(sess);
+      if (sess) {
+        const u = await getMonthlyAiUsage();
+        if (active && u.success) setAiUsage(u);
+      }
+    };
+    loadSession();
+    return () => { active = false; };
+  }, [isOpen]);
+
+  const handleLogin = async () => {
+    setAuthErr('');
+    setAuthMsg('');
+    setAuthBusy(true);
+    const res = await signInWithEmail(email, password);
+    setAuthBusy(false);
+    if (res.success) {
+      setUserSession(res.session);
+      setAuthMsg('¡Sesión iniciada con éxito!');
+      const u = await getMonthlyAiUsage();
+      if (u.success) setAiUsage(u);
+    } else {
+      setAuthErr(res.error);
+    }
+  };
+
+  const handleRegister = async () => {
+    setAuthErr('');
+    setAuthMsg('');
+    setAuthBusy(true);
+    const res = await signUpWithEmail(email, password);
+    setAuthBusy(false);
+    if (res.success) {
+      setAuthMsg('¡Cuenta creada! Revisa tu correo o inicia sesión.');
+    } else {
+      setAuthErr(res.error);
+    }
+  };
+
+  const handleLogout = async () => {
+    await signOutUser();
+    setUserSession(null);
+    setAiUsage({ usos_actuales: 0, limite_mensual: 20, usos_restantes: 0 });
+    setAuthMsg('Sesión cerrada.');
+  };
+
   if (!isOpen) return null;
 
   const handleSave = () => {
@@ -3013,6 +3075,70 @@ function CloudModal({ isOpen, onClose, patients, onPatientsUpdated }) {
           {syncMessage && (
             <div className={`mt-2 p-2 rounded text-xs ${syncMessage.success ? 'bg-ok-soft text-ok' : 'bg-crit-soft text-crit'}`}>
               {syncMessage.text}
+            </div>
+          )}
+        </div>
+
+        {/* Cuenta de Usuario y Usos de IA */}
+        <div className="p-3.5 bg-surface-alt rounded-md border border-line mb-4">
+          <div className="flex items-center justify-between mb-2">
+            <span className="eyebrow text-ink">Cuenta de Usuario (Supabase Auth)</span>
+            {userSession && (
+              <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-950 text-purple-800 dark:text-purple-300">
+                {aiUsage.usos_restantes} / {aiUsage.limite_mensual} usos IA
+              </span>
+            )}
+          </div>
+          {userSession ? (
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-ink truncate max-w-[220px]">
+                Conectado: <strong>{userSession.user?.email}</strong>
+              </span>
+              <button className="btn btn-xs btn-outline text-crit border-crit/30" onClick={handleLogout}>
+                Cerrar sesión
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <p className="text-[11px] text-muted mb-2">
+                Inicia sesión para activar tu cuota de <strong>20 personalizaciones de menú con IA al mes</strong>.
+              </p>
+              {authErr && <div className="text-[11px] p-2 bg-crit-soft text-crit rounded">{authErr}</div>}
+              {authMsg && <div className="text-[11px] p-2 bg-ok-soft text-ok rounded">{authMsg}</div>}
+              <div className="grid grid-cols-2 gap-2">
+                <input
+                  type="email"
+                  className="inp text-xs"
+                  placeholder="Correo"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                />
+                <input
+                  type="password"
+                  className="inp text-xs"
+                  placeholder="Contraseña"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                />
+              </div>
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  className="btn btn-primary btn-xs flex-1"
+                  disabled={authBusy || !email || !password}
+                  onClick={handleLogin}
+                >
+                  {authBusy ? 'Procesando...' : 'Iniciar Sesión'}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-xs flex-1"
+                  disabled={authBusy || !email || !password}
+                  onClick={handleRegister}
+                >
+                  Registrarse
+                </button>
+              </div>
             </div>
           )}
         </div>
