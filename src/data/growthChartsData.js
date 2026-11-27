@@ -167,9 +167,18 @@ export const WHO_0_24_MONTHS = {
   }
 };
 
-// ==== 3. REFERENCIAS OMS 2006: 2 A 5 AÑOS (PESO/TALLA, TALLA/EDAD) ====
+// ==== 3. REFERENCIAS OMS 2006: 2 A 5 AÑOS (PESO/TALLA, TALLA/EDAD, PESO/EDAD) ====
 export const WHO_2_5_YEARS = {
   F: { // Niñas 2 a 5 años
+    weightForAge: [ // Años, -3DE (DS), -2DE (D), 0 (N), +2DE
+      { y: 2, sd3neg: 8.5, sd2neg: 9.0, m0: 11.5, sd2pos: 14.8 },
+      { y: 2.5, sd3neg: 9.3, sd2neg: 9.9, m0: 12.7, sd2pos: 16.5 },
+      { y: 3, sd3neg: 10.0, sd2neg: 10.8, m0: 13.9, sd2pos: 18.1 },
+      { y: 3.5, sd3neg: 10.8, sd2neg: 11.6, m0: 15.0, sd2pos: 19.7 },
+      { y: 4, sd3neg: 11.5, sd2neg: 12.3, m0: 16.1, sd2pos: 21.2 },
+      { y: 4.5, sd3neg: 12.1, sd2neg: 13.0, m0: 17.2, sd2pos: 22.9 },
+      { y: 5, sd3neg: 12.7, sd2neg: 13.7, m0: 18.2, sd2pos: 24.5 },
+    ],
     weightForHeight: [ // Talla (cm), -3DE (DS), -2DE (D), 0 (N), +2DE (SP), +3DE (OB)
       { h: 75, sd3neg: 7.2, sd2neg: 7.8, m0: 9.1, sd2pos: 10.8, sd3pos: 11.9 },
       { h: 80, sd3neg: 8.1, sd2neg: 8.8, m0: 10.2, sd2pos: 12.1, sd3pos: 13.3 },
@@ -193,6 +202,15 @@ export const WHO_2_5_YEARS = {
     ]
   },
   M: { // Niños 2 a 5 años
+    weightForAge: [
+      { y: 2, sd3neg: 9.1, sd2neg: 9.7, m0: 12.2, sd2pos: 15.3 },
+      { y: 2.5, sd3neg: 9.9, sd2neg: 10.5, m0: 13.3, sd2pos: 16.8 },
+      { y: 3, sd3neg: 10.6, sd2neg: 11.3, m0: 14.3, sd2pos: 18.3 },
+      { y: 3.5, sd3neg: 11.3, sd2neg: 12.0, m0: 15.3, sd2pos: 19.8 },
+      { y: 4, sd3neg: 11.9, sd2neg: 12.7, m0: 16.3, sd2pos: 21.2 },
+      { y: 4.5, sd3neg: 12.5, sd2neg: 13.4, m0: 17.3, sd2pos: 22.7 },
+      { y: 5, sd3neg: 13.0, sd2neg: 14.1, m0: 18.3, sd2pos: 24.2 },
+    ],
     weightForHeight: [
       { h: 75, sd3neg: 7.5, sd2neg: 8.1, m0: 9.4, sd2pos: 11.0, sd3pos: 12.0 },
       { h: 80, sd3neg: 8.5, sd2neg: 9.2, m0: 10.6, sd2pos: 12.4, sd3pos: 13.5 },
@@ -349,6 +367,18 @@ export function evaluatePediatricNutrition({ ageYears, ageMonths, sex = 'M', wei
         else if (heightCm < interp.sd2neg) { diag = 'Retardo en Talla (R)'; lvl = 'warn'; }
         else if (heightCm > interp.sd2pos) { diag = 'Talla Alta (A)'; lvl = 'ok'; }
         results.indicators.heightForAge = { value: heightCm, interp, diag, lvl, name: 'Talla para la Edad' };
+      }
+    }
+
+    if (weightKg && data.weightForAge) {
+      const interp = interpolateCurve(data.weightForAge, 'y', years);
+      if (interp) {
+        let diag = 'Peso Normal para la Edad (N)';
+        let lvl = 'ok';
+        if (weightKg < interp.sd3neg) { diag = 'Desnutrición Severa (DS)'; lvl = 'crit'; }
+        else if (weightKg < interp.sd2neg) { diag = 'Desnutrición (D)'; lvl = 'warn'; }
+        else if (weightKg > interp.sd2pos) { diag = 'Peso elevado para la edad'; lvl = 'warn'; }
+        results.indicators.weightForAge = { value: weightKg, interp, diag, lvl, name: 'Peso para la Edad' };
       }
     }
   }

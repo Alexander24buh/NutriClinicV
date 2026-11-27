@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   TrendingUp, Baby, Activity, AlertTriangle, CheckCircle2, Info, ChevronRight, Sparkles, Scale, Heart
 } from 'lucide-react';
@@ -31,20 +31,25 @@ export default function GrowthChartsView({ p, c, set, upd }) {
   const pc = num(a.pc);
   const sexo = g.sexo === 'F' ? 'F' : 'M';
 
-  // Determinación del modelo de evaluación (respetando la selección manual del clínico)
+  // Determinación automática y estricta según edad del paciente:
+  // - Menor de 19 años -> Gráficas de Crecimiento OMS (0 a 19 años)
+  // - Mayor o igual a 19 años -> IMC de Adulto (OMS / OPS)
+  // - Embarazada -> Curva Atalah / MINSAL
   const evaluationModel = useMemo(() => {
+    if (isEmbarazada && sexo === 'F') return 'embarazada';
+    if ((edadAnos != null && edadAnos < 19) || (edadMeses != null && edadMeses > 0 && (edadAnos == null || edadAnos < 19))) {
+      return 'pediatrico';
+    }
+    if (edadAnos != null && edadAnos >= 19) {
+      return 'adulto';
+    }
     if (g.modeloEvaluacion && g.modeloEvaluacion !== 'auto') {
       return g.modeloEvaluacion;
     }
-    if (c.modeloEvaluacion && c.modeloEvaluacion !== 'auto') {
-      return c.modeloEvaluacion;
-    }
-    if (isEmbarazada && sexo === 'F') return 'embarazada';
-    if ((edadAnos != null && edadAnos < 19) || (edadMeses != null && edadMeses > 0 && (edadAnos == null || edadAnos < 19))) return 'pediatrico';
     return 'adulto';
-  }, [g.modeloEvaluacion, c.modeloEvaluacion, isEmbarazada, sexo, edadAnos, edadMeses]);
+  }, [isEmbarazada, sexo, edadAnos, edadMeses, g.modeloEvaluacion]);
 
-  // Subindicador activo para pediatría
+  // Subindicador activo para pediatría según grupo de edad OMS (0-24m, 2-5a, 5-19a)
   const defaultPediatricSub = useMemo(() => {
     const m = edadMeses != null ? edadMeses : (edadAnos != null ? edadAnos * 12 : 24);
     if (m <= 24) return 'w_age';
@@ -53,6 +58,11 @@ export default function GrowthChartsView({ p, c, set, upd }) {
   }, [edadMeses, edadAnos]);
 
   const [pediatricIndicator, setPediatricIndicator] = useState(defaultPediatricSub);
+
+  // Sincronizar automáticamente la gráfica según la edad ingresada
+  useEffect(() => {
+    setPediatricIndicator(defaultPediatricSub);
+  }, [defaultPediatricSub]);
 
   // Cálculos de evaluación
   const heightM = talla ? talla / 100 : null;
@@ -269,21 +279,20 @@ export default function GrowthChartsView({ p, c, set, upd }) {
       }
     } else if (is2to5) {
       const data = WHO_2_5_YEARS[sexo];
-      if (pediatricIndicator === 'w_h' || !pediatricIndicator) {
-        title = `Peso para la Talla (Niñ${sexo === 'F' ? 'as' : 'os'} 2 a 5 años - OMS 2006)`;
-        xLabel = 'Talla (cm)';
+      if (pediatricIndicator === 'w_age') {
+        title = `Peso para la Edad (Niñ${sexo === 'F' ? 'as' : 'os'} 2 a menor de 5 años - OMS 2006)`;
+        xLabel = 'Edad (Años)';
         yLabel = 'Peso (kg)';
-        minX = 75; maxX = 120; minY = 6; maxY = 36;
+        minX = 2; maxX = 5; minY = 6; maxY = 30;
         curves = [
-          { name: '+3 DE (OB)', points: data.weightForHeight.map(p => ({ x: p.h, y: p.sd3pos })), color: '#b91c1c' },
-          { name: '+2 DE (SP)', points: data.weightForHeight.map(p => ({ x: p.h, y: p.sd2pos })), color: '#ea580c' },
-          { name: '0 (N)', points: data.weightForHeight.map(p => ({ x: p.h, y: p.m0 })), color: '#16a34a' },
-          { name: '-2 DE (D)', points: data.weightForHeight.map(p => ({ x: p.h, y: p.sd2neg })), color: '#f59e0b' },
-          { name: '-3 DE (DS)', points: data.weightForHeight.map(p => ({ x: p.h, y: p.sd3neg })), color: '#7f1d1d' },
+          { name: '+2 DE', points: data.weightForAge.map(p => ({ x: p.y, y: p.sd2pos })), color: '#dc2626' },
+          { name: '0 (N)', points: data.weightForAge.map(p => ({ x: p.y, y: p.m0 })), color: '#16a34a' },
+          { name: '-2 DE (D)', points: data.weightForAge.map(p => ({ x: p.y, y: p.sd2neg })), color: '#ea580c' },
+          { name: '-3 DE (DS)', points: data.weightForAge.map(p => ({ x: p.y, y: p.sd3neg })), color: '#b91c1c' },
         ];
-        if (talla && peso) patientPt = { x: talla, y: peso, label: `${f1(talla)} cm · ${f1(peso)} kg` };
-      } else {
-        title = `Talla para la Edad (Niñ${sexo === 'F' ? 'as' : 'os'} 2 a 5 años - OMS 2006)`;
+        if (edadAnos && peso) patientPt = { x: edadAnos, y: peso, label: `${f1(edadAnos)} a · ${f1(peso)} kg` };
+      } else if (pediatricIndicator === 'h_age') {
+        title = `Talla para la Edad (Niñ${sexo === 'F' ? 'as' : 'os'} 2 a menor de 5 años - OMS 2006)`;
         xLabel = 'Edad (Años)';
         yLabel = 'Talla (cm)';
         minX = 2; maxX = 5; minY = 75; maxY = 125;
@@ -294,11 +303,38 @@ export default function GrowthChartsView({ p, c, set, upd }) {
           { name: '-3 DE (RS)', points: data.heightForAge.map(p => ({ x: p.y, y: p.sd3neg })), color: '#b91c1c' },
         ];
         if (edadAnos && talla) patientPt = { x: edadAnos, y: talla, label: `${f1(edadAnos)} a · ${f1(talla)} cm` };
+      } else {
+        // w_h (Peso para la Talla)
+        title = `Peso para la Talla (Niñ${sexo === 'F' ? 'as' : 'os'} 2 a menor de 5 años - OMS 2006)`;
+        xLabel = 'Talla (cm)';
+        yLabel = 'Peso (kg)';
+        minX = 65; maxX = 120; minY = 6; maxY = 32;
+        curves = [
+          { name: '+3 DE (OB)', points: data.weightForHeight.map(p => ({ x: p.h, y: p.sd3pos })), color: '#b91c1c' },
+          { name: '+2 DE (SP)', points: data.weightForHeight.map(p => ({ x: p.h, y: p.sd2pos })), color: '#ea580c' },
+          { name: '0 (N)', points: data.weightForHeight.map(p => ({ x: p.h, y: p.m0 })), color: '#16a34a' },
+          { name: '-2 DE (D)', points: data.weightForHeight.map(p => ({ x: p.h, y: p.sd2neg })), color: '#f59e0b' },
+          { name: '-3 DE (DS)', points: data.weightForHeight.map(p => ({ x: p.h, y: p.sd3neg })), color: '#7f1d1d' },
+        ];
+        if (talla && peso) patientPt = { x: talla, y: peso, label: `${f1(talla)} cm · ${f1(peso)} kg` };
       }
     } else {
       // 5 a 19 años
       const data = WHO_5_19_YEARS[sexo];
-      if (pediatricIndicator === 'bmi_age' || !pediatricIndicator) {
+      if (pediatricIndicator === 'h_age') {
+        title = `Talla para la Edad (Niñ${sexo === 'F' ? 'as' : 'os'} y Adolescentes 5 a 19 años - OMS 2007)`;
+        xLabel = 'Edad (Años)';
+        yLabel = 'Talla (cm)';
+        minX = 5; maxX = 19; minY = 90; maxY = sexo === 'M' ? 200 : 180;
+        curves = [
+          { name: '+3 DE (Talla Alta)', points: data.heightForAge.map(p => ({ x: p.y, y: p.sd3pos })), color: '#2563eb' },
+          { name: '0 (Normal)', points: data.heightForAge.map(p => ({ x: p.y, y: p.m0 })), color: '#16a34a' },
+          { name: '-2 DE (Retardo en Talla)', points: data.heightForAge.map(p => ({ x: p.y, y: p.sd2neg })), color: '#ea580c' },
+          { name: '-3 DE (Retardo Severo)', points: data.heightForAge.map(p => ({ x: p.y, y: p.sd3neg })), color: '#b91c1c' },
+        ];
+        if (edadAnos && talla) patientPt = { x: edadAnos, y: talla, label: `${f1(edadAnos)} a · ${f1(talla)} cm` };
+      } else {
+        // bmi_age (IMC para la Edad)
         title = `IMC para la Edad (Niñ${sexo === 'F' ? 'as' : 'os'} y Adolescentes 5 a 19 años - OMS 2007)`;
         xLabel = 'Edad (Años)';
         yLabel = 'IMC (kg/m²)';
@@ -311,18 +347,6 @@ export default function GrowthChartsView({ p, c, set, upd }) {
           { name: '-3 DE (Delgadez Severa)', points: data.bmiForAge.map(p => ({ x: p.y, y: p.sd3neg })), color: '#7f1d1d' },
         ];
         if (edadAnos && imc) patientPt = { x: edadAnos, y: imc, label: `${f1(edadAnos)} a · IMC ${f1(imc)}` };
-      } else {
-        title = `Talla para la Edad (5 a 19 años - OMS 2007)`;
-        xLabel = 'Edad (Años)';
-        yLabel = 'Talla (cm)';
-        minX = 5; maxX = 19; minY = 90; maxY = 200;
-        curves = [
-          { name: '+3 DE (Talla Alta)', points: data.heightForAge.map(p => ({ x: p.y, y: p.sd3pos })), color: '#2563eb' },
-          { name: '0 (Normal)', points: data.heightForAge.map(p => ({ x: p.y, y: p.m0 })), color: '#16a34a' },
-          { name: '-2 DE (Retardo en Talla)', points: data.heightForAge.map(p => ({ x: p.y, y: p.sd2neg })), color: '#ea580c' },
-          { name: '-3 DE (Retardo Severo)', points: data.heightForAge.map(p => ({ x: p.y, y: p.sd3neg })), color: '#b91c1c' },
-        ];
-        if (edadAnos && talla) patientPt = { x: edadAnos, y: talla, label: `${f1(edadAnos)} a · ${f1(talla)} cm` };
       }
     }
 
@@ -339,9 +363,9 @@ export default function GrowthChartsView({ p, c, set, upd }) {
           <span className="text-xs font-bold text-ink uppercase tracking-wider">{title}</span>
           <div className="flex gap-1">
             {isUnder2 && [
-              ['w_age', 'Peso/Edad'],
-              ['l_age', 'Longitud/Edad'],
-              ['hc_age', 'Perímetro Cefálico']
+              ['w_age', 'Peso/Edad (P/E)'],
+              ['l_age', 'Longitud/Edad (L/E)'],
+              ['hc_age', 'Perímetro Cefálico (PC)']
             ].map(([k, lbl]) => (
               <button
                 key={k}
@@ -353,8 +377,9 @@ export default function GrowthChartsView({ p, c, set, upd }) {
               </button>
             ))}
             {is2to5 && [
-              ['w_h', 'Peso/Talla'],
-              ['h_age', 'Talla/Edad']
+              ['w_h', 'Peso/Talla (P/T)'],
+              ['h_age', 'Talla/Edad (T/E)'],
+              ['w_age', 'Peso/Edad (P/E)']
             ].map(([k, lbl]) => (
               <button
                 key={k}
@@ -366,8 +391,8 @@ export default function GrowthChartsView({ p, c, set, upd }) {
               </button>
             ))}
             {is5to19 && [
-              ['bmi_age', 'IMC/Edad'],
-              ['h_age', 'Talla/Edad']
+              ['bmi_age', 'IMC/Edad (IMC/E)'],
+              ['h_age', 'Talla/Edad (T/E)']
             ].map(([k, lbl]) => (
               <button
                 key={k}
@@ -659,17 +684,19 @@ export default function GrowthChartsView({ p, c, set, upd }) {
               onClick={() => {
                 upd(x => ({ ...x, gen: { ...x.gen, modeloEvaluacion: 'adulto', embarazada: false } }));
               }}
+              title="Evaluación de Adulto (IMC según criterios OMS / OPS para mayores de 19 años)"
             >
-              Adulto
+              Adulto (IMC ≥ 19 a)
             </button>
             <button
               type="button"
               className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${evaluationModel === 'pediatrico' ? 'bg-brand text-white shadow-xs' : 'text-muted hover:text-ink'}`}
               onClick={() => {
-                upd(x => ({ ...x, gen: { ...x.gen, modeloEvaluacion: 'pediatrico', embarazada: false, edad: x.gen.edad && num(x.gen.edad) < 19 ? x.gen.edad : (x.gen.edad || '12') } }));
+                upd(x => ({ ...x, gen: { ...x.gen, modeloEvaluacion: 'pediatrico', embarazada: false } }));
               }}
+              title="Gráficas de Crecimiento OMS (MINSAL El Salvador para menores de 19 años)"
             >
-              Pediatría
+              Pediatría (OMS &lt; 19 a)
             </button>
             <button
               type="button"
@@ -677,11 +704,37 @@ export default function GrowthChartsView({ p, c, set, upd }) {
               onClick={() => {
                 upd(x => ({ ...x, gen: { ...x.gen, modeloEvaluacion: 'embarazada', embarazada: true, sexo: 'F' } }));
               }}
+              title="Evaluación Nutricional de la Embarazada (Atalah / MINSAL)"
             >
               Embarazada
             </button>
           </div>
         </div>
+      </div>
+
+      {/* Indicador informativo de criterio aplicado */}
+      <div className="mb-4 px-3 py-2 rounded-lg bg-surface-alt border border-line text-xs flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Info className="w-4 h-4 text-brand shrink-0" />
+          <span className="text-ink">
+            {evaluationModel === 'pediatrico' ? (
+              <>
+                <strong>Criterio Pediátrico Activo (OMS):</strong> Paciente menor de 19 años ({edadAnos != null ? `${edadAnos} años` : `${edadMeses || 0} meses`}). Se evalúa con las <strong>Gráficas Oficiales de Crecimiento OMS (MINSAL El Salvador)</strong> según su grupo de edad.
+              </>
+            ) : evaluationModel === 'adulto' ? (
+              <>
+                <strong>Criterio de Adulto Activo:</strong> Paciente de 19 años o más ({edadAnos != null ? `${edadAnos} años` : 'edad no especificada'}). Se evalúa el estado nutricional mediante <strong>Índice de Masa Corporal (IMC)</strong> {edadAnos >= 65 ? 'bajo criterios OPS (Adulto Mayor)' : 'según puntos de corte estándar de la OMS'}.
+              </>
+            ) : (
+              <>
+                <strong>Criterio Obstétrico Activo:</strong> Evaluación gestacional mediante curva de Atalah / MINSAL según semanas de amenorrea e IMC.
+              </>
+            )}
+          </span>
+        </div>
+        <span className="pill text-[10px] font-bold uppercase tracking-wider shrink-0 bg-brand-soft text-brand">
+          {evaluationModel === 'pediatrico' ? 'OMS < 19 AÑOS' : evaluationModel === 'adulto' ? 'IMC ADULTO ≥ 19 AÑOS' : 'GESTACIONAL'}
+        </span>
       </div>
 
       {/* Inputs específicos para el modelo */}

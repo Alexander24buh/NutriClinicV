@@ -231,20 +231,17 @@ function calc(p) {
   const pesoPregest = num(g.pesoPregestacional);
   const edadMeses = num(g.edadMeses);
 
-  // Determinación del modelo: explícito si fue elegido por el usuario, o automático según edad/gestación
+  // Determinación del modelo: automático y estricto según edad/gestación
   let modelo = g.modeloEvaluacion || 'auto';
-  if (modelo === 'auto') {
-    if (sexo === 'F' && (g.embarazada === true || g.embarazada === 'true')) {
-      modelo = 'embarazada';
-    } else if ((edad != null && edad < 19) || (edadMeses != null && edadMeses > 0 && (edad == null || edad < 19))) {
-      modelo = 'pediatrico';
-    } else {
-      modelo = 'adulto';
-    }
-  }
-
-  // Regla médica estricta: Pacientes con 19 años o más no son evaluados bajo modelo pediátrico
-  if (edad != null && edad >= 19 && modelo === 'pediatrico') {
+  if (sexo === 'F' && (g.embarazada === true || g.embarazada === 'true')) {
+    modelo = 'embarazada';
+  } else if ((edad != null && edad < 19) || (edadMeses != null && edadMeses > 0 && (edad == null || edad < 19))) {
+    // Menores de 19 años -> evaluación mediante gráficas de crecimiento OMS (0 a 19 años)
+    modelo = 'pediatrico';
+  } else if (edad != null && edad >= 19) {
+    // Mayores o iguales a 19 años -> evaluación mediante IMC de adulto
+    modelo = 'adulto';
+  } else if (modelo === 'auto') {
     modelo = 'adulto';
   }
 
@@ -3259,7 +3256,21 @@ export default function App() {
     patients: s.patients.map(x => x.id === s.activeId ? fn(x) : x)
   })), []);
 
-  const set = useCallback((path, val) => upd(x => setIn(x, path, val)), [upd]);
+  const set = useCallback((path, val) => upd(x => {
+    let next = setIn(x, path, val);
+    if (path === 'gen.edad' || path === 'gen.edadMeses') {
+      const eAnos = num(path === 'gen.edad' ? val : next.gen?.edad);
+      const eMeses = num(path === 'gen.edadMeses' ? val : next.gen?.edadMeses);
+      if (!next.gen?.embarazada) {
+        if ((eAnos != null && eAnos < 19) || (eMeses != null && eMeses > 0 && (eAnos == null || eAnos < 19))) {
+          next = setIn(next, 'gen.modeloEvaluacion', 'pediatrico');
+        } else if (eAnos != null && eAnos >= 19) {
+          next = setIn(next, 'gen.modeloEvaluacion', 'adulto');
+        }
+      }
+    }
+    return next;
+  }), [upd]);
   const c = useMemo(() => calc(p), [p]);
   const setActive = id => setState(s => ({ ...s, activeId: id }));
 
