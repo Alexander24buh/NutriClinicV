@@ -4,6 +4,269 @@
 // 2. OMS 2006: Patrones de Crecimiento Infantil (0 a 5 años) - MINSAL Unidad de Nutrición
 // 3. OMS 2007: Crecimiento y Desarrollo de Niños y Adolescentes (5 a 19 años) - MINSAL Unidad de Nutrición
 
+// ==== 0. CÁLCULO DE EDAD EFECTIVA Y CLASIFICACIÓN DE GRUPO ====
+export function getPatientEffectiveAge(edadYears, edadMonths) {
+  const y = (edadYears !== null && edadYears !== undefined && edadYears !== '') ? parseFloat(String(edadYears).replace(',', '.')) : null;
+  const m = (edadMonths !== null && edadMonths !== undefined && edadMonths !== '') ? parseFloat(String(edadMonths).replace(',', '.')) : null;
+
+  if (y === null && m === null) {
+    return {
+      totalMonths: null,
+      totalYears: null,
+      group: null,
+      isUnder2: false,
+      is2to5: false,
+      is5to19: false,
+      isAdult: false,
+      formattedAge: 'Edad no especificada'
+    };
+  }
+
+  let totalMonths = 0;
+  if (y !== null && m !== null) {
+    totalMonths = y * 12 + m;
+  } else if (y !== null) {
+    totalMonths = y * 12;
+  } else {
+    totalMonths = m;
+  }
+
+  const totalYears = totalMonths / 12;
+
+  const isUnder2 = totalMonths <= 24;
+  const is2to5 = totalMonths > 24 && totalMonths < 60;
+  const is5to19 = totalMonths >= 60 && totalYears <= 19;
+  const isAdult = totalYears >= 19;
+
+  let group = 'g1';
+  let formattedAge = '';
+  if (isAdult) {
+    group = 'adult';
+    formattedAge = `${Math.floor(totalYears)} años`;
+  } else if (is5to19) {
+    group = 'g3';
+    formattedAge = `${Math.floor(totalYears)} años${totalMonths % 12 > 0 ? ` ${Math.round(totalMonths % 12)} m` : ''}`;
+  } else if (is2to5) {
+    group = 'g2';
+    formattedAge = `${Math.floor(totalYears)} años ${Math.round(totalMonths % 12)} meses (${Math.round(totalMonths)} m)`;
+  } else {
+    group = 'g1';
+    formattedAge = `${Math.round(totalMonths)} meses`;
+  }
+
+  return {
+    totalMonths,
+    totalYears,
+    group,
+    isUnder2,
+    is2to5,
+    is5to19,
+    isAdult,
+    formattedAge
+  };
+}
+
+// Catálogo interactivo de 8 Gráficas Oficiales divididas en 3 grupos de edad
+export const GROWTH_CHARTS_CATALOG = [
+  {
+    groupId: 'g1',
+    groupName: 'Grupo 1: 0 a 24 meses',
+    norma: 'OMS 2006 · MINSAL',
+    ageRangeText: '0 a 24 meses (Lactantes menores y mayores)',
+    minMonths: 0,
+    maxMonths: 24,
+    charts: [
+      {
+        id: 'g1_w_age',
+        name: 'Peso para la Edad (P/E)',
+        shortCode: 'P/E',
+        groupId: 'g1',
+        description: 'Vigilancia de ganancia de peso y desnutrición global en lactantes de 0 a 24 meses.',
+        xKey: 'm',
+        xLabel: 'Edad (Meses)',
+        yLabel: 'Peso (kg)',
+        unitX: 'meses',
+        unitY: 'kg',
+        minX: 0,
+        maxX: 24,
+        minY: 1.5,
+        maxY: 16,
+        dataKey: 'weightForAge'
+      },
+      {
+        id: 'g1_l_age',
+        name: 'Longitud para la Edad (L/E)',
+        shortCode: 'L/E',
+        groupId: 'g1',
+        description: 'Evaluación del crecimiento lineal recumbente y desnutrición crónica (retardo en talla).',
+        xKey: 'm',
+        xLabel: 'Edad (Meses)',
+        yLabel: 'Longitud (cm)',
+        unitX: 'meses',
+        unitY: 'cm',
+        minX: 0,
+        maxX: 24,
+        minY: 40,
+        maxY: 100,
+        dataKey: 'lengthForAge'
+      },
+      {
+        id: 'g1_hc_age',
+        name: 'Perímetro Cefálico para la Edad (PC/E)',
+        shortCode: 'PC/E',
+        groupId: 'g1',
+        description: 'Vigilancia del neurodesarrollo y detección precoz de microcefalia o macrocefalia.',
+        xKey: 'm',
+        xLabel: 'Edad (Meses)',
+        yLabel: 'Perímetro Cefálico (cm)',
+        unitX: 'meses',
+        unitY: 'cm',
+        minX: 0,
+        maxX: 24,
+        minY: 30,
+        maxY: 54,
+        dataKey: 'hcForAge'
+      }
+    ]
+  },
+  {
+    groupId: 'g2',
+    groupName: 'Grupo 2: 2 a menor de 5 años',
+    norma: 'OMS 2006 · MINSAL',
+    ageRangeText: '2 a menor de 5 años (24 a 59 meses)',
+    minMonths: 24.01,
+    maxMonths: 59.99,
+    charts: [
+      {
+        id: 'g2_w_h',
+        name: 'Peso para la Talla (P/T)',
+        shortCode: 'P/T',
+        groupId: 'g2',
+        description: 'Estándar de oro para desnutrición aguda, emaciación, sobrepeso y obesidad sin sesgo de edad.',
+        xKey: 'h',
+        xLabel: 'Talla (cm)',
+        yLabel: 'Peso (kg)',
+        unitX: 'cm',
+        unitY: 'kg',
+        minX: 65,
+        maxX: 120,
+        minY: 6,
+        maxY: 32,
+        dataKey: 'weightForHeight'
+      },
+      {
+        id: 'g2_h_age',
+        name: 'Talla para la Edad (T/E)',
+        shortCode: 'T/E',
+        groupId: 'g2',
+        description: 'Evaluación de estatura de pie y detección de retardo crónico de crecimiento.',
+        xKey: 'y',
+        xLabel: 'Edad (Años)',
+        yLabel: 'Talla (cm)',
+        unitX: 'años',
+        unitY: 'cm',
+        minX: 2,
+        maxX: 5,
+        minY: 75,
+        maxY: 125,
+        dataKey: 'heightForAge'
+      },
+      {
+        id: 'g2_w_age',
+        name: 'Peso para la Edad (P/E)',
+        shortCode: 'P/E',
+        groupId: 'g2',
+        description: 'Vigilancia epidemiológica de bajo peso en niños preescolares de 2 a 5 años.',
+        xKey: 'y',
+        xLabel: 'Edad (Años)',
+        yLabel: 'Peso (kg)',
+        unitX: 'años',
+        unitY: 'kg',
+        minX: 2,
+        maxX: 5,
+        minY: 6,
+        maxY: 30,
+        dataKey: 'weightForAge'
+      }
+    ]
+  },
+  {
+    groupId: 'g3',
+    groupName: 'Grupo 3: 5 a 19 años',
+    norma: 'OMS 2007 · MINSAL',
+    ageRangeText: '5 a 19 años cumplidos (Niños, Niñas y Adolescentes)',
+    minMonths: 60,
+    maxMonths: 228,
+    charts: [
+      {
+        id: 'g3_bmi_age',
+        name: 'Índice de Masa Corporal para la Edad (IMC/E)',
+        shortCode: 'IMC/E',
+        groupId: 'g3',
+        description: 'Diagnóstico de delgadez severa, delgadez, sobrepeso y obesidad en la edad escolar y adolescencia.',
+        xKey: 'y',
+        xLabel: 'Edad (Años)',
+        yLabel: 'IMC (kg/m²)',
+        unitX: 'años',
+        unitY: 'kg/m²',
+        minX: 5,
+        maxX: 19,
+        minY: 10,
+        maxY: 36,
+        dataKey: 'bmiForAge'
+      },
+      {
+        id: 'g3_h_age',
+        name: 'Talla para la Edad (T/E)',
+        shortCode: 'T/E',
+        groupId: 'g3',
+        description: 'Evaluación del estirón puberal y talla final en niños y adolescentes de 5 a 19 años.',
+        xKey: 'y',
+        xLabel: 'Edad (Años)',
+        yLabel: 'Talla (cm)',
+        unitX: 'años',
+        unitY: 'cm',
+        minX: 5,
+        maxX: 19,
+        minY: 90,
+        maxY: 200,
+        dataKey: 'heightForAge'
+      }
+    ]
+  }
+];
+
+// Helper para obtener la sugerencia de gráfica según la edad y sexo
+export function getSuggestedChart(effectiveAge, sex = 'M') {
+  const group = effectiveAge?.group;
+  if (group === 'g1') {
+    return {
+      defaultChartId: 'g1_w_age',
+      suggestedChartIds: ['g1_w_age', 'g1_l_age', 'g1_hc_age'],
+      groupId: 'g1',
+      groupName: 'Grupo 1: 0 a 24 meses (OMS 2006)',
+      title: `Niñ${sex === 'F' ? 'as' : 'os'} 0 a 24 meses · OMS 2006`
+    };
+  }
+  if (group === 'g2') {
+    return {
+      defaultChartId: 'g2_w_h',
+      suggestedChartIds: ['g2_w_h', 'g2_h_age', 'g2_w_age'],
+      groupId: 'g2',
+      groupName: 'Grupo 2: 2 a menor de 5 años (OMS 2006)',
+      title: `Niñ${sex === 'F' ? 'as' : 'os'} 2 a < 5 años · OMS 2006`
+    };
+  }
+  // Grupo 3 o por defecto para pediatría / adolescencia
+  return {
+    defaultChartId: 'g3_bmi_age',
+    suggestedChartIds: ['g3_bmi_age', 'g3_h_age'],
+    groupId: 'g3',
+    groupName: 'Grupo 3: 5 a 19 años (OMS 2007)',
+    title: `Niñ${sex === 'F' ? 'as' : 'os'} y Adolescentes 5 a 19 años · OMS 2007`
+  };
+}
+
 // ==== 1. CURVAS DE EVALUACIÓN NUTRICIONAL DE LA EMBARAZADA (ATALAH / MINSAL EL SALVADOR) ====
 export const PREGNANCY_CUTOFFS = [
   { week: 6, bajo: 18.5, normal: 25.0, sobrepeso: 30.0 },
@@ -286,8 +549,9 @@ export const WHO_5_19_YEARS = {
 // Evaluador integral de pediatría / adolescencia (OMS 2006 / 2007)
 export function evaluatePediatricNutrition({ ageYears, ageMonths, sex = 'M', weightKg, heightCm, hcCm }) {
   const gender = sex === 'F' ? 'F' : 'M';
-  const months = ageMonths != null ? ageMonths : (ageYears != null ? ageYears * 12 : null);
-  const years = ageYears != null ? ageYears : (ageMonths != null ? ageMonths / 12 : null);
+  const effAge = getPatientEffectiveAge(ageYears, ageMonths);
+  const months = effAge.totalMonths;
+  const years = effAge.totalYears;
 
   if (months == null && years == null) {
     return { error: 'Falta la edad (años o meses) para evaluación pediátrica.' };
@@ -297,6 +561,7 @@ export function evaluatePediatricNutrition({ ageYears, ageMonths, sex = 'M', wei
     category: 'pediatrico',
     ageYears: years,
     ageMonths: months,
+    effectiveAge: effAge,
     sex: gender,
     indicators: {},
     primaryDiagnosis: 'Evaluación en proceso',
@@ -304,12 +569,12 @@ export function evaluatePediatricNutrition({ ageYears, ageMonths, sex = 'M', wei
   };
 
   // 1. Grupo 0 a 24 meses
-  if (months != null && months <= 24) {
+  if (effAge.isUnder2) {
     const data = WHO_0_24_MONTHS[gender];
     if (weightKg && data.weightForAge) {
       const interp = interpolateCurve(data.weightForAge, 'm', months);
       if (interp) {
-        let diag = 'Normal';
+        let diag = 'Peso Normal para la Edad (N)';
         let lvl = 'ok';
         if (weightKg < interp.sd3neg) { diag = 'Desnutrición Severa (DS)'; lvl = 'crit'; }
         else if (weightKg < interp.sd2neg) { diag = 'Desnutrición (D)'; lvl = 'warn'; }
@@ -321,7 +586,7 @@ export function evaluatePediatricNutrition({ ageYears, ageMonths, sex = 'M', wei
     if (heightCm && data.lengthForAge) {
       const interp = interpolateCurve(data.lengthForAge, 'm', months);
       if (interp) {
-        let diag = 'Talla Normal (N)';
+        let diag = 'Longitud Normal (N)';
         let lvl = 'ok';
         if (heightCm < interp.sd3neg) { diag = 'Retardo Severo en el Crecimiento (RS)'; lvl = 'crit'; }
         else if (heightCm < interp.sd2neg) { diag = 'Retardo en el Crecimiento (R)'; lvl = 'warn'; }
@@ -343,7 +608,7 @@ export function evaluatePediatricNutrition({ ageYears, ageMonths, sex = 'M', wei
   }
 
   // 2. Grupo 2 a 5 años (24 a 60 meses)
-  else if (years != null && years < 5) {
+  else if (effAge.is2to5) {
     const data = WHO_2_5_YEARS[gender];
     if (weightKg && heightCm && data.weightForHeight) {
       const interp = interpolateCurve(data.weightForHeight, 'h', heightCm);
@@ -361,7 +626,7 @@ export function evaluatePediatricNutrition({ ageYears, ageMonths, sex = 'M', wei
     if (heightCm && data.heightForAge) {
       const interp = interpolateCurve(data.heightForAge, 'y', years);
       if (interp) {
-        let diag = 'Talla Normal (N)';
+        let diag = 'Talla Normal para la Edad (N)';
         let lvl = 'ok';
         if (heightCm < interp.sd3neg) { diag = 'Retardo Severo en Talla (RS)'; lvl = 'crit'; }
         else if (heightCm < interp.sd2neg) { diag = 'Retardo en Talla (R)'; lvl = 'warn'; }
@@ -384,17 +649,17 @@ export function evaluatePediatricNutrition({ ageYears, ageMonths, sex = 'M', wei
   }
 
   // 3. Grupo 5 a 19 años
-  else if (years != null && years >= 5 && years <= 19) {
+  else if (effAge.is5to19) {
     const data = WHO_5_19_YEARS[gender];
     const imc = (weightKg && heightCm) ? weightKg / Math.pow(heightCm / 100, 2) : null;
 
     if (imc && data.bmiForAge) {
       const interp = interpolateCurve(data.bmiForAge, 'y', years);
       if (interp) {
-        let diag = 'IMC Normal (N)';
+        let diag = 'IMC Normal para la Edad (N)';
         let lvl = 'ok';
-        if (imc < interp.sd3neg) { diag = 'Desnutrición Severa / Delgadez Severa (DS)'; lvl = 'crit'; }
-        else if (imc < interp.sd2neg) { diag = 'Desnutrición / Delgadez (D)'; lvl = 'warn'; }
+        if (imc < interp.sd3neg) { diag = 'Delgadez Severa (DS)'; lvl = 'crit'; }
+        else if (imc < interp.sd2neg) { diag = 'Delgadez (D)'; lvl = 'warn'; }
         else if (imc > interp.sd2pos) { diag = 'Obesidad (O)'; lvl = 'crit'; }
         else if (imc > interp.sd1pos) { diag = 'Sobrepeso (SP)'; lvl = 'warn'; }
         results.indicators.bmiForAge = { value: imc, interp, diag, lvl, name: 'IMC para la Edad (OMS 2007)' };
@@ -404,7 +669,7 @@ export function evaluatePediatricNutrition({ ageYears, ageMonths, sex = 'M', wei
     if (heightCm && data.heightForAge) {
       const interp = interpolateCurve(data.heightForAge, 'y', years);
       if (interp) {
-        let diag = 'Talla Normal (N)';
+        let diag = 'Talla Normal para la Edad (N)';
         let lvl = 'ok';
         if (heightCm < interp.sd3neg) { diag = 'Retardo Severo en Talla (RS)'; lvl = 'crit'; }
         else if (heightCm < interp.sd2neg) { diag = 'Retardo en Talla (R)'; lvl = 'warn'; }
@@ -429,7 +694,273 @@ export function evaluatePediatricNutrition({ ageYears, ageMonths, sex = 'M', wei
   return results;
 }
 
-function interpolateCurve(list, keyX, valX) {
+// ==== EVALUADOR ESPECÍFICO PARA CUALQUIERA DE LAS 8 GRÁFICAS DEL CATÁLOGO ====
+export function evaluateCatalogChart(chartId, { ageYears, ageMonths, sex = 'M', weightKg, heightCm, hcCm }) {
+  const gender = sex === 'F' ? 'F' : 'M';
+  const effAge = getPatientEffectiveAge(ageYears, ageMonths);
+
+  // Buscar información de la gráfica en el catálogo
+  let chartMeta = null;
+  let chartGroup = null;
+  for (const grp of GROWTH_CHARTS_CATALOG) {
+    const found = grp.charts.find(c => c.id === chartId);
+    if (found) {
+      chartMeta = found;
+      chartGroup = grp;
+      break;
+    }
+  }
+
+  if (!chartMeta) {
+    chartMeta = GROWTH_CHARTS_CATALOG[2].charts[0]; // fallback IMC/E 5-19a
+    chartGroup = GROWTH_CHARTS_CATALOG[2];
+  }
+
+  // Comprobar coincidencia con el grupo de edad del paciente
+  const isAgeMismatch = effAge.group !== null && effAge.group !== chartGroup.groupId;
+  let mismatchWarning = null;
+  if (isAgeMismatch) {
+    mismatchWarning = `Esta gráfica no corresponde al rango de edad actual del paciente (${effAge.formattedAge || 'sin edad'}). Está estandarizada para: ${chartGroup.ageRangeText}.`;
+  }
+
+  // Obtener datos crudos según indicador y sexo
+  let rawData = [];
+  let curves = [];
+  let ptX = null;
+  let ptY = null;
+  let ptLabel = '';
+  let diagnosis = 'Datos incompletos';
+  let level = 'ok';
+  let interp = null;
+  let interpCutText = '';
+
+  const imc = (weightKg && heightCm) ? weightKg / Math.pow(heightCm / 100, 2) : null;
+
+  switch (chartMeta.id) {
+    // ---- GRUPO 1: 0 A 24 MESES ----
+    case 'g1_w_age': {
+      rawData = WHO_0_24_MONTHS[gender].weightForAge;
+      ptX = effAge.totalMonths;
+      ptY = weightKg;
+      ptLabel = ptX != null && ptY != null ? `${ptX.toFixed(1)} m · ${ptY.toFixed(1)} kg` : '';
+      curves = [
+        { name: '+2 DE', points: rawData.map(p => ({ x: p.m, y: p.sd2pos })), color: '#dc2626' },
+        { name: '0 (Mediana)', points: rawData.map(p => ({ x: p.m, y: p.m0 })), color: '#16a34a' },
+        { name: '-2 DE (D)', points: rawData.map(p => ({ x: p.m, y: p.sd2neg })), color: '#ea580c' },
+        { name: '-3 DE (DS)', points: rawData.map(p => ({ x: p.m, y: p.sd3neg })), color: '#b91c1c' },
+      ];
+      if (ptX != null && ptY != null) {
+        interp = interpolateCurve(rawData, 'm', ptX);
+        if (interp) {
+          interpCutText = `Mediana: ${interp.m0.toFixed(1)} kg · [-2DE: ${interp.sd2neg.toFixed(1)} | +2DE: ${interp.sd2pos.toFixed(1)}]`;
+          if (ptY < interp.sd3neg) { diagnosis = 'Desnutrición Severa (DS)'; level = 'crit'; }
+          else if (ptY < interp.sd2neg) { diagnosis = 'Desnutrición (D)'; level = 'warn'; }
+          else if (ptY > interp.sd2pos) { diagnosis = 'Peso elevado para la edad'; level = 'warn'; }
+          else { diagnosis = 'Peso Normal para la Edad (N)'; level = 'ok'; }
+        }
+      }
+      break;
+    }
+
+    case 'g1_l_age': {
+      rawData = WHO_0_24_MONTHS[gender].lengthForAge;
+      ptX = effAge.totalMonths;
+      ptY = heightCm;
+      ptLabel = ptX != null && ptY != null ? `${ptX.toFixed(1)} m · ${ptY.toFixed(1)} cm` : '';
+      curves = [
+        { name: '+2 DE (A)', points: rawData.map(p => ({ x: p.m, y: p.sd2pos })), color: '#2563eb' },
+        { name: '0 (N)', points: rawData.map(p => ({ x: p.m, y: p.m0 })), color: '#16a34a' },
+        { name: '-2 DE (R)', points: rawData.map(p => ({ x: p.m, y: p.sd2neg })), color: '#ea580c' },
+        { name: '-3 DE (RS)', points: rawData.map(p => ({ x: p.m, y: p.sd3neg })), color: '#b91c1c' },
+      ];
+      if (ptX != null && ptY != null) {
+        interp = interpolateCurve(rawData, 'm', ptX);
+        if (interp) {
+          interpCutText = `Mediana: ${interp.m0.toFixed(1)} cm · [-2DE: ${interp.sd2neg.toFixed(1)} | +2DE: ${interp.sd2pos.toFixed(1)}]`;
+          if (ptY < interp.sd3neg) { diagnosis = 'Retardo Severo en el Crecimiento (RS)'; level = 'crit'; }
+          else if (ptY < interp.sd2neg) { diagnosis = 'Retardo en el Crecimiento (R)'; level = 'warn'; }
+          else if (ptY > interp.sd2pos) { diagnosis = 'Talla Alta (A)'; level = 'ok'; }
+          else { diagnosis = 'Longitud Normal (N)'; level = 'ok'; }
+        }
+      }
+      break;
+    }
+
+    case 'g1_hc_age': {
+      rawData = WHO_0_24_MONTHS[gender].hcForAge;
+      ptX = effAge.totalMonths;
+      ptY = hcCm;
+      ptLabel = ptX != null && ptY != null ? `${ptX.toFixed(1)} m · ${ptY.toFixed(1)} cm` : '';
+      curves = [
+        { name: '+2 DE (MAC)', points: rawData.map(p => ({ x: p.m, y: p.sd2pos })), color: '#dc2626' },
+        { name: '0 (N)', points: rawData.map(p => ({ x: p.m, y: p.m0 })), color: '#16a34a' },
+        { name: '-2 DE (MIC)', points: rawData.map(p => ({ x: p.m, y: p.sd2neg })), color: '#b91c1c' },
+      ];
+      if (ptX != null && ptY != null) {
+        interp = interpolateCurve(rawData, 'm', ptX);
+        if (interp) {
+          interpCutText = `Mediana: ${interp.m0.toFixed(1)} cm · [-2DE: ${interp.sd2neg.toFixed(1)} | +2DE: ${interp.sd2pos.toFixed(1)}]`;
+          if (ptY < interp.sd2neg) { diagnosis = 'Microcefalia (MIC) - Alerta 2° Nivel'; level = 'crit'; }
+          else if (ptY > interp.sd2pos) { diagnosis = 'Macrocefalia (MAC) - Alerta 2° Nivel'; level = 'crit'; }
+          else { diagnosis = 'Perímetro Cefálico Normal (N)'; level = 'ok'; }
+        }
+      }
+      break;
+    }
+
+    // ---- GRUPO 2: 2 A MENOR DE 5 AÑOS ----
+    case 'g2_w_h': {
+      rawData = WHO_2_5_YEARS[gender].weightForHeight;
+      ptX = heightCm;
+      ptY = weightKg;
+      ptLabel = ptX != null && ptY != null ? `${ptX.toFixed(1)} cm · ${ptY.toFixed(1)} kg` : '';
+      curves = [
+        { name: '+3 DE (OB)', points: rawData.map(p => ({ x: p.h, y: p.sd3pos })), color: '#7f1d1d' },
+        { name: '+2 DE (SP)', points: rawData.map(p => ({ x: p.h, y: p.sd2pos })), color: '#ea580c' },
+        { name: '0 (N)', points: rawData.map(p => ({ x: p.h, y: p.m0 })), color: '#16a34a' },
+        { name: '-2 DE (D)', points: rawData.map(p => ({ x: p.h, y: p.sd2neg })), color: '#f59e0b' },
+        { name: '-3 DE (DS)', points: rawData.map(p => ({ x: p.h, y: p.sd3neg })), color: '#b91c1c' },
+      ];
+      if (ptX != null && ptY != null) {
+        interp = interpolateCurve(rawData, 'h', ptX);
+        if (interp) {
+          interpCutText = `Mediana: ${interp.m0.toFixed(1)} kg · [-2DE: ${interp.sd2neg.toFixed(1)} | +2DE: ${interp.sd2pos.toFixed(1)} | +3DE: ${interp.sd3pos.toFixed(1)}]`;
+          if (ptY < interp.sd3neg) { diagnosis = 'Desnutrición Aguda Severa (DS)'; level = 'crit'; }
+          else if (ptY < interp.sd2neg) { diagnosis = 'Desnutrición Aguda (D)'; level = 'warn'; }
+          else if (ptY > interp.sd3pos) { diagnosis = 'Obesidad (OB)'; level = 'crit'; }
+          else if (ptY > interp.sd2pos) { diagnosis = 'Sobrepeso (SP)'; level = 'warn'; }
+          else { diagnosis = 'Estado Nutricional Normal (N)'; level = 'ok'; }
+        }
+      }
+      break;
+    }
+
+    case 'g2_h_age': {
+      rawData = WHO_2_5_YEARS[gender].heightForAge;
+      ptX = effAge.totalYears;
+      ptY = heightCm;
+      ptLabel = ptX != null && ptY != null ? `${ptX.toFixed(1)} a · ${ptY.toFixed(1)} cm` : '';
+      curves = [
+        { name: '+2 DE (A)', points: rawData.map(p => ({ x: p.y, y: p.sd2pos })), color: '#2563eb' },
+        { name: '0 (N)', points: rawData.map(p => ({ x: p.y, y: p.m0 })), color: '#16a34a' },
+        { name: '-2 DE (R)', points: rawData.map(p => ({ x: p.y, y: p.sd2neg })), color: '#ea580c' },
+        { name: '-3 DE (RS)', points: rawData.map(p => ({ x: p.y, y: p.sd3neg })), color: '#b91c1c' },
+      ];
+      if (ptX != null && ptY != null) {
+        interp = interpolateCurve(rawData, 'y', ptX);
+        if (interp) {
+          interpCutText = `Mediana: ${interp.m0.toFixed(1)} cm · [-2DE: ${interp.sd2neg.toFixed(1)} | +2DE: ${interp.sd2pos.toFixed(1)}]`;
+          if (ptY < interp.sd3neg) { diagnosis = 'Retardo Severo en Talla (RS)'; level = 'crit'; }
+          else if (ptY < interp.sd2neg) { diagnosis = 'Retardo en Talla (R)'; level = 'warn'; }
+          else if (ptY > interp.sd2pos) { diagnosis = 'Talla Alta (A)'; level = 'ok'; }
+          else { diagnosis = 'Talla Normal para la Edad (N)'; level = 'ok'; }
+        }
+      }
+      break;
+    }
+
+    case 'g2_w_age': {
+      rawData = WHO_2_5_YEARS[gender].weightForAge;
+      ptX = effAge.totalYears;
+      ptY = weightKg;
+      ptLabel = ptX != null && ptY != null ? `${ptX.toFixed(1)} a · ${ptY.toFixed(1)} kg` : '';
+      curves = [
+        { name: '+2 DE', points: rawData.map(p => ({ x: p.y, y: p.sd2pos })), color: '#dc2626' },
+        { name: '0 (N)', points: rawData.map(p => ({ x: p.y, y: p.m0 })), color: '#16a34a' },
+        { name: '-2 DE (D)', points: rawData.map(p => ({ x: p.y, y: p.sd2neg })), color: '#ea580c' },
+        { name: '-3 DE (DS)', points: rawData.map(p => ({ x: p.y, y: p.sd3neg })), color: '#b91c1c' },
+      ];
+      if (ptX != null && ptY != null) {
+        interp = interpolateCurve(rawData, 'y', ptX);
+        if (interp) {
+          interpCutText = `Mediana: ${interp.m0.toFixed(1)} kg · [-2DE: ${interp.sd2neg.toFixed(1)} | +2DE: ${interp.sd2pos.toFixed(1)}]`;
+          if (ptY < interp.sd3neg) { diagnosis = 'Desnutrición Severa (DS)'; level = 'crit'; }
+          else if (ptY < interp.sd2neg) { diagnosis = 'Desnutrición (D)'; level = 'warn'; }
+          else if (ptY > interp.sd2pos) { diagnosis = 'Peso elevado para la edad'; level = 'warn'; }
+          else { diagnosis = 'Peso Normal para la Edad (N)'; level = 'ok'; }
+        }
+      }
+      break;
+    }
+
+    // ---- GRUPO 3: 5 A 19 AÑOS ----
+    case 'g3_bmi_age': {
+      rawData = WHO_5_19_YEARS[gender].bmiForAge;
+      ptX = effAge.totalYears;
+      ptY = imc;
+      ptLabel = ptX != null && ptY != null ? `${ptX.toFixed(1)} a · IMC ${ptY.toFixed(1)}` : '';
+      curves = [
+        { name: '+3 DE (OB Severa)', points: rawData.map(p => ({ x: p.y, y: p.sd3pos })), color: '#7f1d1d' },
+        { name: '+2 DE (Obesidad)', points: rawData.map(p => ({ x: p.y, y: p.sd2pos })), color: '#b91c1c' },
+        { name: '+1 DE (Sobrepeso)', points: rawData.map(p => ({ x: p.y, y: p.sd1pos })), color: '#ea580c' },
+        { name: '0 (Normal)', points: rawData.map(p => ({ x: p.y, y: p.m0 })), color: '#16a34a' },
+        { name: '-2 DE (Delgadez)', points: rawData.map(p => ({ x: p.y, y: p.sd2neg })), color: '#f59e0b' },
+        { name: '-3 DE (Delgadez Severa)', points: rawData.map(p => ({ x: p.y, y: p.sd3neg })), color: '#7f1d1d' },
+      ];
+      if (ptX != null && ptY != null) {
+        interp = interpolateCurve(rawData, 'y', ptX);
+        if (interp) {
+          interpCutText = `Mediana: ${interp.m0.toFixed(1)} kg/m² · [-2DE: ${interp.sd2neg.toFixed(1)} | +1DE: ${interp.sd1pos.toFixed(1)} | +2DE: ${interp.sd2pos.toFixed(1)}]`;
+          if (ptY < interp.sd3neg) { diagnosis = 'Delgadez Severa (DS)'; level = 'crit'; }
+          else if (ptY < interp.sd2neg) { diagnosis = 'Delgadez (D)'; level = 'warn'; }
+          else if (ptY > interp.sd2pos) { diagnosis = 'Obesidad (OB)'; level = 'crit'; }
+          else if (ptY > interp.sd1pos) { diagnosis = 'Sobrepeso (SP)'; level = 'warn'; }
+          else { diagnosis = 'IMC Normal para la Edad (N)'; level = 'ok'; }
+        }
+      }
+      break;
+    }
+
+    case 'g3_h_age': {
+      rawData = WHO_5_19_YEARS[gender].heightForAge;
+      ptX = effAge.totalYears;
+      ptY = heightCm;
+      ptLabel = ptX != null && ptY != null ? `${ptX.toFixed(1)} a · ${ptY.toFixed(1)} cm` : '';
+      curves = [
+        { name: '+3 DE (Talla Alta)', points: rawData.map(p => ({ x: p.y, y: p.sd3pos })), color: '#2563eb' },
+        { name: '0 (Normal)', points: rawData.map(p => ({ x: p.y, y: p.m0 })), color: '#16a34a' },
+        { name: '-2 DE (Retardo en Talla)', points: rawData.map(p => ({ x: p.y, y: p.sd2neg })), color: '#ea580c' },
+        { name: '-3 DE (Retardo Severo)', points: rawData.map(p => ({ x: p.y, y: p.sd3neg })), color: '#b91c1c' },
+      ];
+      if (ptX != null && ptY != null) {
+        interp = interpolateCurve(rawData, 'y', ptX);
+        if (interp) {
+          interpCutText = `Mediana: ${interp.m0.toFixed(1)} cm · [-2DE: ${interp.sd2neg.toFixed(1)} | Mediana: ${interp.m0.toFixed(1)}]`;
+          if (ptY < interp.sd3neg) { diagnosis = 'Retardo Severo en Talla (RS)'; level = 'crit'; }
+          else if (ptY < interp.sd2neg) { diagnosis = 'Retardo en Talla (R)'; level = 'warn'; }
+          else if (ptY > (interp.sd3pos || interp.sd2pos)) { diagnosis = 'Talla Alta (A)'; level = 'ok'; }
+          else { diagnosis = 'Talla Normal para la Edad (N)'; level = 'ok'; }
+        }
+      }
+      break;
+    }
+  }
+
+  // Comprobar si el punto del paciente está en el rango graficable
+  const hasPatientPoint = ptX != null && ptY != null &&
+    ptX >= chartMeta.minX && ptX <= chartMeta.maxX &&
+    ptY >= chartMeta.minY && ptY <= chartMeta.maxY;
+
+  return {
+    chartMeta,
+    chartGroup,
+    sex: gender,
+    isAgeMismatch,
+    mismatchWarning,
+    curves,
+    ptX,
+    ptY,
+    ptLabel,
+    hasPatientPoint,
+    interp,
+    interpCutText,
+    diagnosis,
+    level,
+    imc
+  };
+}
+
+export function interpolateCurve(list, keyX, valX) {
   if (!list || !list.length) return null;
   const sorted = [...list].sort((a, b) => a[keyX] - b[keyX]);
   if (valX <= sorted[0][keyX]) return sorted[0];

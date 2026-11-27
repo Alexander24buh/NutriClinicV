@@ -13,7 +13,7 @@ import {
   EXCHANGE_GROUPS, MEAL_TIMES, generateMealMenuFromExchanges
 } from './data/exchangeDatabase.js';
 import { RISS_DIETS, evaluateRissDietRecommendation } from './data/rissDatabase.js';
-import { evaluatePregnancyStatus, evaluatePediatricNutrition } from './data/growthChartsData.js';
+import { evaluatePregnancyStatus, evaluatePediatricNutrition, getPatientEffectiveAge } from './data/growthChartsData.js';
 import { evaluateMedicationAlerts } from './data/drugFoodInteractions.js';
 import GrowthChartsView from './components/GrowthChartsView.jsx';
 import MedicationsSection from './components/MedicationsSection.jsx';
@@ -269,6 +269,7 @@ function calc(p) {
       o.imcEscala = 'Atalah / MINSAL El Salvador';
     }
   } else if (isPediatrico) {
+    const effAge = getPatientEffectiveAge(edad, edadMeses);
     const pedEval = evaluatePediatricNutrition({
       ageYears: edad,
       ageMonths: edadMeses,
@@ -280,7 +281,11 @@ function calc(p) {
     o.pediatricEval = pedEval;
     if (pedEval && pedEval.primaryDiagnosis && !pedEval.error) {
       o.imcCl = lv(pedEval.level, pedEval.primaryDiagnosis, pedEval.level === 'ok' ? '✓' : '↓');
-      o.imcEscala = edadMeses != null && edadMeses <= 24 ? 'OMS 2006 (0–24 meses)' : (edad != null && edad < 5) ? 'OMS 2006 (2–5 años)' : 'OMS 2007 (5–19 años)';
+      o.imcEscala = effAge.isUnder2
+        ? 'OMS 2006 (0–24 meses)'
+        : effAge.is2to5
+        ? 'OMS 2006 (2–5 años)'
+        : 'OMS 2007 (5–19 años)';
     } else {
       o.imcCl = clasifIMC(o.imc, edad);
       o.imcEscala = 'OMS Pediátrico';
@@ -1396,7 +1401,7 @@ function SubA() {
               <Field label="Peso seco estimado" hint="Edema / ascitis / diálisis">
                 <In path="antro.pesoSeco" num unit="kg" placeholder="Opcional" />
               </Field>
-              <Field label={c.isPediatrico && (num(p.gen.edadMeses) || 0) < 24 ? "Longitud / Talla" : "Talla"}>
+              <Field label={c.isPediatrico && getPatientEffectiveAge(p.gen.edad, p.gen.edadMeses).isUnder2 ? "Longitud recumbente" : "Talla"}>
                 <In path="antro.talla" num unit="cm" />
               </Field>
               <Field label="Peso habitual"><In path="antro.habitual" num unit="kg" /></Field>
@@ -1405,8 +1410,25 @@ function SubA() {
             {/* Campos complementarios para pediatría */}
             {c.isPediatrico && (
               <div className="grid gap-4 sm:grid-cols-2 mt-4 pt-4 border-t border-[var(--line)]">
-                <Field label="Perímetro cefálico" hint="Para lactantes 0 a 24 meses (OMS 2006)">
-                  <In path="antro.pc" num unit="cm" placeholder="Ej. 42.5" />
+                <Field
+                  label="Perímetro cefálico"
+                  hint={
+                    getPatientEffectiveAge(p.gen.edad, p.gen.edadMeses).isUnder2
+                      ? "Para lactantes 0 a 24 meses (OMS 2006)"
+                      : "Solo aplicable de 0 a 24 meses (desactivado para ≥ 2 años)"
+                  }
+                >
+                  {getPatientEffectiveAge(p.gen.edad, p.gen.edadMeses).isUnder2 ? (
+                    <In path="antro.pc" num unit="cm" placeholder="Ej. 42.5" />
+                  ) : (
+                    <input
+                      type="text"
+                      disabled
+                      className="inp opacity-50 cursor-not-allowed bg-[var(--sunken)]"
+                      value={p.antro.pc || ''}
+                      placeholder="Solo aplicable de 0 a 24 meses"
+                    />
+                  )}
                 </Field>
                 <Field label="Técnica de medición">
                   <Sel path="antro.longitudTipo" options={[['de_pie', 'De pie (Talla)'], ['acostado', 'Acostado / decúbito (Longitud)']]} />

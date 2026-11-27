@@ -1,10 +1,14 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import {
-  TrendingUp, Baby, Activity, AlertTriangle, CheckCircle2, Info, ChevronRight, Sparkles, Scale, Heart
+  TrendingUp, Baby, Activity, AlertTriangle, CheckCircle2, Info, ChevronRight, Sparkles, Scale, Heart, LayoutGrid
 } from 'lucide-react';
 import {
-  PREGNANCY_CUTOFFS, evaluatePregnancyStatus,
-  WHO_0_24_MONTHS, WHO_2_5_YEARS, WHO_5_19_YEARS,
+  GROWTH_CHARTS_CATALOG,
+  getPatientEffectiveAge,
+  getSuggestedChart,
+  evaluateCatalogChart,
+  PREGNANCY_CUTOFFS,
+  evaluatePregnancyStatus,
   evaluatePediatricNutrition
 } from '../data/growthChartsData.js';
 
@@ -15,6 +19,7 @@ const num = v => {
 };
 const f1 = n => n == null || !Number.isFinite(n) ? '—' : n.toFixed(1);
 const f0 = n => n == null || !Number.isFinite(n) ? '—' : Math.round(n).toLocaleString('en-US');
+const f2 = n => n == null || !Number.isFinite(n) ? '—' : n.toFixed(2);
 
 export default function GrowthChartsView({ p, c, set, upd }) {
   const g = p.gen || {};
@@ -31,64 +36,84 @@ export default function GrowthChartsView({ p, c, set, upd }) {
   const pc = num(a.pc);
   const sexo = g.sexo === 'F' ? 'F' : 'M';
 
+  // Cálculo de edad efectiva total del paciente
+  const effectiveAge = useMemo(() => {
+    return getPatientEffectiveAge(edadAnos, edadMeses);
+  }, [edadAnos, edadMeses]);
+
   // Determinación automática y estricta según edad del paciente:
   // - Menor de 19 años -> Gráficas de Crecimiento OMS (0 a 19 años)
   // - Mayor o igual a 19 años -> IMC de Adulto (OMS / OPS)
   // - Embarazada -> Curva Atalah / MINSAL
   const evaluationModel = useMemo(() => {
     if (isEmbarazada && sexo === 'F') return 'embarazada';
-    if ((edadAnos != null && edadAnos < 19) || (edadMeses != null && edadMeses > 0 && (edadAnos == null || edadAnos < 19))) {
+    if (effectiveAge.isUnder2 || effectiveAge.is2to5 || effectiveAge.is5to19) {
       return 'pediatrico';
     }
-    if (edadAnos != null && edadAnos >= 19) {
+    if (effectiveAge.isAdult) {
       return 'adulto';
     }
     if (g.modeloEvaluacion && g.modeloEvaluacion !== 'auto') {
       return g.modeloEvaluacion;
     }
     return 'adulto';
-  }, [isEmbarazada, sexo, edadAnos, edadMeses, g.modeloEvaluacion]);
+  }, [isEmbarazada, sexo, effectiveAge, g.modeloEvaluacion]);
 
-  // Subindicador activo para pediatría según grupo de edad OMS (0-24m, 2-5a, 5-19a)
-  const defaultPediatricSub = useMemo(() => {
-    const m = edadMeses != null ? edadMeses : (edadAnos != null ? edadAnos * 12 : 24);
-    if (m <= 24) return 'w_age';
-    if (m < 60) return 'w_h';
-    return 'bmi_age';
-  }, [edadMeses, edadAnos]);
+  // Sugerencia automática de gráficas según grupo de edad y sexo
+  const suggested = useMemo(() => {
+    return getSuggestedChart(effectiveAge, sexo);
+  }, [effectiveAge, sexo]);
 
-  const [pediatricIndicator, setPediatricIndicator] = useState(defaultPediatricSub);
+  // Estado de la gráfica seleccionada en el catálogo interactivo (por defecto la sugerida)
+  const [selectedChartId, setSelectedChartId] = useState(suggested.defaultChartId);
 
-  // Sincronizar automáticamente la gráfica según la edad ingresada
+  // Sincronizar automáticamente la gráfica sugerida cuando cambie el grupo de edad del paciente o el sexo
   useEffect(() => {
-    setPediatricIndicator(defaultPediatricSub);
-  }, [defaultPediatricSub]);
+    if (suggested?.defaultChartId) {
+      setSelectedChartId(suggested.defaultChartId);
+    }
+  }, [suggested.groupId, suggested.defaultChartId, sexo]);
 
-  // Cálculos de evaluación
+  // Cálculos antropométricos generales
   const heightM = talla ? talla / 100 : null;
   const imc = peso && heightM ? peso / (heightM * heightM) : null;
 
+  // Evaluación obstétrica
   const pregnancyResult = useMemo(() => {
     if (evaluationModel !== 'embarazada') return null;
     return evaluatePregnancyStatus(semGestacional, imc, pesoPregest, heightM);
   }, [evaluationModel, semGestacional, imc, pesoPregest, heightM]);
 
+  // Evaluación pediátrica integral (multicriterio)
   const pediatricResult = useMemo(() => {
     if (evaluationModel !== 'pediatrico') return null;
     return evaluatePediatricNutrition({
       ageYears: edadAnos,
       ageMonths: edadMeses,
-      sexo,
+      sex: sexo,
       weightKg: peso,
       heightCm: talla,
       hcCm: pc
     });
   }, [evaluationModel, edadAnos, edadMeses, sexo, peso, talla, pc]);
 
+  // Evaluación específica de la gráfica actualmente seleccionada en el catálogo
+  const chartEval = useMemo(() => {
+    if (evaluationModel !== 'pediatrico') return null;
+    return evaluateCatalogChart(selectedChartId, {
+      ageYears: edadAnos,
+      ageMonths: edadMeses,
+      sex: sexo,
+      weightKg: peso,
+      heightCm: talla,
+      hcCm: pc
+    });
+  }, [evaluationModel, selectedChartId, edadAnos, edadMeses, sexo, peso, talla, pc]);
+
   // Dimensiones del gráfico SVG
   const svgWidth = 640;
   const svgHeight = 360;
-  const padding = { top: 30, right: 30, bottom: 45, left: 55 };
+  const padding = { top: 30, right: 35, bottom: 45, left: 55 };
   const plotWidth = svgWidth - padding.left - padding.right;
   const plotHeight = svgHeight - padding.top - padding.bottom;
 
@@ -197,13 +222,10 @@ export default function GrowthChartsView({ p, c, set, upd }) {
           {/* Punto de la paciente */}
           {hasPatientPoint && (
             <g>
-              {/* Círculo pulsante */}
               <circle cx={ptX} cy={ptY} r="10" fill="#dc2626" opacity="0.3" className="animate-ping" />
               <circle cx={ptX} cy={ptY} r="6" fill="#dc2626" stroke="#ffffff" strokeWidth="2" />
-              {/* Líneas guía */}
               <line x1={ptX} y1={ptY} x2={ptX} y2={padding.top + plotHeight} stroke="#dc2626" strokeWidth="1" strokeDasharray="3,3" />
               <line x1={padding.left} y1={ptY} x2={ptX} y2={ptY} stroke="#dc2626" strokeWidth="1" strokeDasharray="3,3" />
-              {/* Etiqueta del punto */}
               <rect x={ptX - 45} y={ptY - 26} width="90" height="18" rx="4" fill="var(--ink)" opacity="0.9" />
               <text x={ptX} y={ptY - 14} fill="#ffffff" fontSize="9.5" fontWeight="bold" textAnchor="middle">
                 Sem {semGestacional} · IMC {f1(imc)}
@@ -226,266 +248,257 @@ export default function GrowthChartsView({ p, c, set, upd }) {
     );
   };
 
-  // ==== RENDERIZADOR DE GRÁFICAS PEDIÁTRICAS (OMS 2006 / 2007 - MINSAL) ====
+  // ==== RENDERIZADOR DEL CATÁLOGO INTERACTIVO Y GRÁFICAS PEDIÁTRICAS (OMS 2006 / 2007 - MINSAL) ====
   const renderPediatricChart = () => {
-    const isUnder2 = (edadMeses != null && edadMeses <= 24) || (edadAnos != null && edadAnos < 2);
-    const is2to5 = !isUnder2 && ((edadAnos != null && edadAnos < 5) || (edadMeses != null && edadMeses < 60));
-    const is5to19 = !isUnder2 && !is2to5;
-
-    let title = '';
-    let xLabel = '';
-    let yLabel = '';
-    let minX = 0, maxX = 24, minY = 0, maxY = 20;
-    let curves = [];
-    let patientPt = null;
-
-    if (isUnder2) {
-      const data = WHO_0_24_MONTHS[sexo];
-      if (pediatricIndicator === 'w_age') {
-        title = `Peso para la Edad (Niñ${sexo === 'F' ? 'as' : 'os'} 0 a 24 meses - OMS 2006)`;
-        xLabel = 'Edad (Meses)';
-        yLabel = 'Peso (kg)';
-        minX = 0; maxX = 24; minY = 2; maxY = 16;
-        curves = [
-          { name: '+2 DE', points: data.weightForAge.map(p => ({ x: p.m, y: p.sd2pos })), color: '#dc2626' },
-          { name: '0 (Mediana)', points: data.weightForAge.map(p => ({ x: p.m, y: p.m0 })), color: '#16a34a' },
-          { name: '-2 DE (D)', points: data.weightForAge.map(p => ({ x: p.m, y: p.sd2neg })), color: '#ea580c' },
-          { name: '-3 DE (DS)', points: data.weightForAge.map(p => ({ x: p.m, y: p.sd3neg })), color: '#b91c1c' },
-        ];
-        if (edadMeses != null && peso) patientPt = { x: edadMeses, y: peso, label: `${edadMeses} m · ${f1(peso)} kg` };
-      } else if (pediatricIndicator === 'l_age') {
-        title = `Longitud para la Edad (Niñ${sexo === 'F' ? 'as' : 'os'} 0 a 24 meses - OMS 2006)`;
-        xLabel = 'Edad (Meses)';
-        yLabel = 'Longitud (cm)';
-        minX = 0; maxX = 24; minY = 40; maxY = 100;
-        curves = [
-          { name: '+2 DE (A)', points: data.lengthForAge.map(p => ({ x: p.m, y: p.sd2pos })), color: '#2563eb' },
-          { name: '0 (N)', points: data.lengthForAge.map(p => ({ x: p.m, y: p.m0 })), color: '#16a34a' },
-          { name: '-2 DE (R)', points: data.lengthForAge.map(p => ({ x: p.m, y: p.sd2neg })), color: '#ea580c' },
-          { name: '-3 DE (RS)', points: data.lengthForAge.map(p => ({ x: p.m, y: p.sd3neg })), color: '#b91c1c' },
-        ];
-        if (edadMeses != null && talla) patientPt = { x: edadMeses, y: talla, label: `${edadMeses} m · ${f1(talla)} cm` };
-      } else {
-        title = `Perímetro Cefálico (Niñ${sexo === 'F' ? 'as' : 'os'} 0 a 24 meses - OMS 2006)`;
-        xLabel = 'Edad (Meses)';
-        yLabel = 'Perímetro Cefálico (cm)';
-        minX = 0; maxX = 24; minY = 30; maxY = 54;
-        curves = [
-          { name: '+2 DE (MAC)', points: data.hcForAge.map(p => ({ x: p.m, y: p.sd2pos })), color: '#dc2626' },
-          { name: '0 (N)', points: data.hcForAge.map(p => ({ x: p.m, y: p.m0 })), color: '#16a34a' },
-          { name: '-2 DE (MIC)', points: data.hcForAge.map(p => ({ x: p.m, y: p.sd2neg })), color: '#b91c1c' },
-        ];
-        if (edadMeses != null && pc) patientPt = { x: edadMeses, y: pc, label: `${edadMeses} m · ${f1(pc)} cm` };
-      }
-    } else if (is2to5) {
-      const data = WHO_2_5_YEARS[sexo];
-      if (pediatricIndicator === 'w_age') {
-        title = `Peso para la Edad (Niñ${sexo === 'F' ? 'as' : 'os'} 2 a menor de 5 años - OMS 2006)`;
-        xLabel = 'Edad (Años)';
-        yLabel = 'Peso (kg)';
-        minX = 2; maxX = 5; minY = 6; maxY = 30;
-        curves = [
-          { name: '+2 DE', points: data.weightForAge.map(p => ({ x: p.y, y: p.sd2pos })), color: '#dc2626' },
-          { name: '0 (N)', points: data.weightForAge.map(p => ({ x: p.y, y: p.m0 })), color: '#16a34a' },
-          { name: '-2 DE (D)', points: data.weightForAge.map(p => ({ x: p.y, y: p.sd2neg })), color: '#ea580c' },
-          { name: '-3 DE (DS)', points: data.weightForAge.map(p => ({ x: p.y, y: p.sd3neg })), color: '#b91c1c' },
-        ];
-        if (edadAnos && peso) patientPt = { x: edadAnos, y: peso, label: `${f1(edadAnos)} a · ${f1(peso)} kg` };
-      } else if (pediatricIndicator === 'h_age') {
-        title = `Talla para la Edad (Niñ${sexo === 'F' ? 'as' : 'os'} 2 a menor de 5 años - OMS 2006)`;
-        xLabel = 'Edad (Años)';
-        yLabel = 'Talla (cm)';
-        minX = 2; maxX = 5; minY = 75; maxY = 125;
-        curves = [
-          { name: '+2 DE (A)', points: data.heightForAge.map(p => ({ x: p.y, y: p.sd2pos })), color: '#2563eb' },
-          { name: '0 (N)', points: data.heightForAge.map(p => ({ x: p.y, y: p.m0 })), color: '#16a34a' },
-          { name: '-2 DE (R)', points: data.heightForAge.map(p => ({ x: p.y, y: p.sd2neg })), color: '#ea580c' },
-          { name: '-3 DE (RS)', points: data.heightForAge.map(p => ({ x: p.y, y: p.sd3neg })), color: '#b91c1c' },
-        ];
-        if (edadAnos && talla) patientPt = { x: edadAnos, y: talla, label: `${f1(edadAnos)} a · ${f1(talla)} cm` };
-      } else {
-        // w_h (Peso para la Talla)
-        title = `Peso para la Talla (Niñ${sexo === 'F' ? 'as' : 'os'} 2 a menor de 5 años - OMS 2006)`;
-        xLabel = 'Talla (cm)';
-        yLabel = 'Peso (kg)';
-        minX = 65; maxX = 120; minY = 6; maxY = 32;
-        curves = [
-          { name: '+3 DE (OB)', points: data.weightForHeight.map(p => ({ x: p.h, y: p.sd3pos })), color: '#b91c1c' },
-          { name: '+2 DE (SP)', points: data.weightForHeight.map(p => ({ x: p.h, y: p.sd2pos })), color: '#ea580c' },
-          { name: '0 (N)', points: data.weightForHeight.map(p => ({ x: p.h, y: p.m0 })), color: '#16a34a' },
-          { name: '-2 DE (D)', points: data.weightForHeight.map(p => ({ x: p.h, y: p.sd2neg })), color: '#f59e0b' },
-          { name: '-3 DE (DS)', points: data.weightForHeight.map(p => ({ x: p.h, y: p.sd3neg })), color: '#7f1d1d' },
-        ];
-        if (talla && peso) patientPt = { x: talla, y: peso, label: `${f1(talla)} cm · ${f1(peso)} kg` };
-      }
-    } else {
-      // 5 a 19 años
-      const data = WHO_5_19_YEARS[sexo];
-      if (pediatricIndicator === 'h_age') {
-        title = `Talla para la Edad (Niñ${sexo === 'F' ? 'as' : 'os'} y Adolescentes 5 a 19 años - OMS 2007)`;
-        xLabel = 'Edad (Años)';
-        yLabel = 'Talla (cm)';
-        minX = 5; maxX = 19; minY = 90; maxY = sexo === 'M' ? 200 : 180;
-        curves = [
-          { name: '+3 DE (Talla Alta)', points: data.heightForAge.map(p => ({ x: p.y, y: p.sd3pos })), color: '#2563eb' },
-          { name: '0 (Normal)', points: data.heightForAge.map(p => ({ x: p.y, y: p.m0 })), color: '#16a34a' },
-          { name: '-2 DE (Retardo en Talla)', points: data.heightForAge.map(p => ({ x: p.y, y: p.sd2neg })), color: '#ea580c' },
-          { name: '-3 DE (Retardo Severo)', points: data.heightForAge.map(p => ({ x: p.y, y: p.sd3neg })), color: '#b91c1c' },
-        ];
-        if (edadAnos && talla) patientPt = { x: edadAnos, y: talla, label: `${f1(edadAnos)} a · ${f1(talla)} cm` };
-      } else {
-        // bmi_age (IMC para la Edad)
-        title = `IMC para la Edad (Niñ${sexo === 'F' ? 'as' : 'os'} y Adolescentes 5 a 19 años - OMS 2007)`;
-        xLabel = 'Edad (Años)';
-        yLabel = 'IMC (kg/m²)';
-        minX = 5; maxX = 19; minY = 10; maxY = 36;
-        curves = [
-          { name: '+2 DE (Obesidad)', points: data.bmiForAge.map(p => ({ x: p.y, y: p.sd2pos })), color: '#b91c1c' },
-          { name: '+1 DE (Sobrepeso)', points: data.bmiForAge.map(p => ({ x: p.y, y: p.sd1pos })), color: '#ea580c' },
-          { name: '0 (Normal)', points: data.bmiForAge.map(p => ({ x: p.y, y: p.m0 })), color: '#16a34a' },
-          { name: '-2 DE (Delgadez)', points: data.bmiForAge.map(p => ({ x: p.y, y: p.sd2neg })), color: '#f59e0b' },
-          { name: '-3 DE (Delgadez Severa)', points: data.bmiForAge.map(p => ({ x: p.y, y: p.sd3neg })), color: '#7f1d1d' },
-        ];
-        if (edadAnos && imc) patientPt = { x: edadAnos, y: imc, label: `${f1(edadAnos)} a · IMC ${f1(imc)}` };
-      }
-    }
+    if (!chartEval) return null;
+    const { chartMeta, chartGroup, curves, hasPatientPoint, ptX, ptY, ptLabel, diagnosis, level, interpCutText, isAgeMismatch, mismatchWarning } = chartEval;
+    const { minX, maxX, minY, maxY, xLabel, yLabel } = chartMeta;
 
     const scaleX = x => padding.left + ((x - minX) / (maxX - minX)) * plotWidth;
     const scaleY = y => padding.top + plotHeight - ((y - minY) / (maxY - minY)) * plotHeight;
 
-    const hasPt = patientPt && patientPt.x >= minX && patientPt.x <= maxX && patientPt.y >= minY && patientPt.y <= maxY;
-    const ptX = hasPt ? scaleX(patientPt.x) : null;
-    const ptY = hasPt ? scaleY(patientPt.y) : null;
+    const patientSvgX = hasPatientPoint ? scaleX(ptX) : null;
+    const patientSvgY = hasPatientPoint ? scaleY(ptY) : null;
+
+    // Calcular ticks agradables para el gráfico
+    const numTicksX = 7;
+    const numTicksY = 7;
+    const ticksX = Array.from({ length: numTicksX }).map((_, i) => minX + i * ((maxX - minX) / (numTicksX - 1)));
+    const ticksY = Array.from({ length: numTicksY }).map((_, i) => minY + i * ((maxY - minY) / (numTicksY - 1)));
 
     return (
-      <div className="relative">
-        <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-          <span className="text-xs font-bold text-ink uppercase tracking-wider">{title}</span>
-          <div className="flex gap-1">
-            {isUnder2 && [
-              ['w_age', 'Peso/Edad (P/E)'],
-              ['l_age', 'Longitud/Edad (L/E)'],
-              ['hc_age', 'Perímetro Cefálico (PC)']
-            ].map(([k, lbl]) => (
-              <button
-                key={k}
-                type="button"
-                className={`px-2 py-0.5 text-xs rounded border ${pediatricIndicator === k ? 'bg-brand text-white border-brand font-bold' : 'bg-surface text-ink border-line'}`}
-                onClick={() => setPediatricIndicator(k)}
-              >
-                {lbl}
-              </button>
-            ))}
-            {is2to5 && [
-              ['w_h', 'Peso/Talla (P/T)'],
-              ['h_age', 'Talla/Edad (T/E)'],
-              ['w_age', 'Peso/Edad (P/E)']
-            ].map(([k, lbl]) => (
-              <button
-                key={k}
-                type="button"
-                className={`px-2 py-0.5 text-xs rounded border ${pediatricIndicator === k ? 'bg-brand text-white border-brand font-bold' : 'bg-surface text-ink border-line'}`}
-                onClick={() => setPediatricIndicator(k)}
-              >
-                {lbl}
-              </button>
-            ))}
-            {is5to19 && [
-              ['bmi_age', 'IMC/Edad (IMC/E)'],
-              ['h_age', 'Talla/Edad (T/E)']
-            ].map(([k, lbl]) => (
-              <button
-                key={k}
-                type="button"
-                className={`px-2 py-0.5 text-xs rounded border ${pediatricIndicator === k ? 'bg-brand text-white border-brand font-bold' : 'bg-surface text-ink border-line'}`}
-                onClick={() => setPediatricIndicator(k)}
-              >
-                {lbl}
-              </button>
-            ))}
+      <div className="space-y-4">
+        {/* 1. CATÁLOGO INTERACTIVO DE GRÁFICAS OFICIALES CON SUGERENCIA AUTOMÁTICA */}
+        <div className="bg-sunken/60 rounded-xl border border-line p-3.5 space-y-3">
+          {/* Banner de Sugerencia Automática */}
+          <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-lg bg-brand-soft/50 border border-brand/30">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-brand shrink-0" />
+              <div className="text-xs text-ink font-semibold">
+                <span>Gráficas sugeridas para este paciente </span>
+                <span className="text-brand font-bold">({sexo === 'F' ? 'Femenino' : 'Masculino'} · {effectiveAge.formattedAge || 'Sin edad'}):</span>
+              </div>
+              <span className="pill text-[10px] font-bold bg-brand text-white shadow-xs">
+                {suggested.groupName}
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {suggested.suggestedChartIds.map(scId => {
+                const scMeta = GROWTH_CHARTS_CATALOG.flatMap(g => g.charts).find(c => c.id === scId);
+                if (!scMeta) return null;
+                const isActive = selectedChartId === scId;
+                return (
+                  <button
+                    key={scId}
+                    type="button"
+                    onClick={() => setSelectedChartId(scId)}
+                    className={`px-2.5 py-1 text-xs rounded-md transition-all flex items-center gap-1.5 border ${
+                      isActive
+                        ? 'bg-brand text-white border-brand font-bold shadow-xs'
+                        : 'bg-surface text-ink border-line hover:border-brand/40'
+                    }`}
+                  >
+                    <span className="font-extrabold text-[11px]">{scMeta.shortCode}</span>
+                    <span className="hidden sm:inline">{scMeta.name.split('(')[0].trim()}</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
+
+          {/* 3 Grupos de Tablas Oficiales en Tarjetas Organizadas */}
+          <div className="grid gap-3 md:grid-cols-3">
+            {GROWTH_CHARTS_CATALOG.map(group => {
+              const isGroupSuggested = suggested.groupId === group.groupId;
+              return (
+                <div
+                  key={group.groupId}
+                  className={`p-3 rounded-lg border transition-all ${
+                    isGroupSuggested
+                      ? 'border-brand/60 bg-surface shadow-2xs ring-1 ring-brand/20'
+                      : 'border-line bg-surface/70'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-bold text-ink">{group.groupName}</span>
+                        {isGroupSuggested && (
+                          <span className="badge badge-primary text-[9px] px-1.5 py-0">Sugerido</span>
+                        )}
+                      </div>
+                      <div className="text-[10px] text-muted">{group.norma} · {group.ageRangeText}</div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5 mt-2">
+                    {group.charts.map(chart => {
+                      const isChartActive = selectedChartId === chart.id;
+                      return (
+                        <button
+                          key={chart.id}
+                          type="button"
+                          onClick={() => setSelectedChartId(chart.id)}
+                          className={`w-full text-left p-2 rounded-md border text-xs transition-all flex items-center justify-between gap-2 ${
+                            isChartActive
+                              ? 'bg-brand text-white border-brand font-semibold shadow-xs'
+                              : 'bg-surface-alt/70 text-ink border-line hover:bg-surface hover:border-line-hover'
+                          }`}
+                        >
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <span className={`px-1.5 py-0.2 rounded text-[10px] font-mono font-bold ${
+                                isChartActive ? 'bg-white/20 text-white' : 'bg-sunken text-brand'
+                              }`}>
+                                {chart.shortCode}
+                              </span>
+                              <span className="truncate">{chart.name}</span>
+                            </div>
+                          </div>
+                          {isChartActive ? (
+                            <CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-white" />
+                          ) : (
+                            <ChevronRight className="w-3.5 h-3.5 shrink-0 text-muted" />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Alerta de Desajuste si el usuario selecciona manualmente una tabla que no corresponde a la edad del paciente */}
+          {isAgeMismatch && (
+            <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-900 dark:text-amber-200 text-xs flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400" />
+              <div>
+                <strong>Esta gráfica no corresponde al rango de edad actual del paciente.</strong> El paciente tiene{' '}
+                <span className="font-semibold">{effectiveAge.formattedAge || 'edad sin especificar'}</span>, mientras que esta tabla oficial está estandarizada para{' '}
+                <span className="font-semibold">{chartGroup.ageRangeText}</span>.
+              </div>
+            </div>
+          )}
         </div>
 
-        <svg viewBox={`0 0 ${svgWidth} ${svgHeight}`} className="w-full h-auto bg-surface border border-line rounded-lg shadow-2xs font-sans">
-          {/* Ejes */}
-          <line x1={padding.left} y1={padding.top} x2={padding.left} y2={padding.top + plotHeight} stroke="var(--ink)" strokeWidth="1.2" />
-          <line x1={padding.left} y1={padding.top + plotHeight} x2={padding.left + plotWidth} y2={padding.top + plotHeight} stroke="var(--ink)" strokeWidth="1.2" />
+        {/* 2. TRAZADO DINÁMICO DE LA GRÁFICA SVG */}
+        <div className="p-3 bg-surface rounded-xl border border-line shadow-2xs">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-2 pb-2 border-b border-line">
+            <div className="flex items-center gap-2">
+              <span className="badge badge-primary text-[10px] px-2 py-0.5">{chartMeta.shortCode}</span>
+              <span className="text-xs font-bold text-ink uppercase tracking-wide">
+                {chartMeta.name} — Niñ{sexo === 'F' ? 'as' : 'os'} ({chartGroup.groupName})
+              </span>
+            </div>
+            {hasPatientPoint && (
+              <span className={`pill ${level} text-xs font-bold`}>
+                Diagnóstico: {diagnosis}
+              </span>
+            )}
+          </div>
 
-          {/* Grid lines X */}
-          {Array.from({ length: 9 }).map((_, i) => {
-            const val = minX + i * ((maxX - minX) / 8);
-            const x = scaleX(val);
-            return (
-              <g key={`px-${val}`}>
-                <line x1={x} y1={padding.top} x2={x} y2={padding.top + plotHeight} stroke="var(--line)" strokeWidth="0.6" strokeDasharray="2,2" />
-                <text x={x} y={padding.top + plotHeight + 15} fontSize="9" textAnchor="middle" fill="var(--muted)">{f1(val)}</text>
-              </g>
-            );
-          })}
+          <svg viewBox={`0 0 ${svgWidth} ${svgHeight}`} className="w-full h-auto bg-surface border border-line rounded-lg shadow-2xs font-sans">
+            {/* Ejes X e Y */}
+            <line x1={padding.left} y1={padding.top} x2={padding.left} y2={padding.top + plotHeight} stroke="var(--ink)" strokeWidth="1.2" />
+            <line x1={padding.left} y1={padding.top + plotHeight} x2={padding.left + plotWidth} y2={padding.top + plotHeight} stroke="var(--ink)" strokeWidth="1.2" />
 
-          {/* Grid lines Y */}
-          {Array.from({ length: 9 }).map((_, i) => {
-            const val = minY + i * ((maxY - minY) / 8);
-            const y = scaleY(val);
-            return (
-              <g key={`py-${val}`}>
-                <line x1={padding.left} y1={y} x2={padding.left + plotWidth} y2={y} stroke="var(--line)" strokeWidth="0.6" strokeDasharray="2,2" />
-                <text x={padding.left - 8} y={y + 3} fontSize="9" textAnchor="end" fill="var(--muted)">{f0(val)}</text>
-              </g>
-            );
-          })}
+            {/* Grid lines X */}
+            {ticksX.map(val => {
+              const x = scaleX(val);
+              return (
+                <g key={`gx-${val}`}>
+                  <line x1={x} y1={padding.top} x2={x} y2={padding.top + plotHeight} stroke="var(--line)" strokeWidth="0.6" strokeDasharray="2,2" />
+                  <text x={x} y={padding.top + plotHeight + 15} fontSize="9" textAnchor="middle" fill="var(--muted)">
+                    {f1(val)}
+                  </text>
+                </g>
+              );
+            })}
 
-          {/* Trazado de Curvas */}
-          {curves.map(c => {
-            const pointsStr = c.points.map(pt => `${scaleX(pt.x)},${scaleY(pt.y)}`).join(' ');
-            const lastPt = c.points[c.points.length - 1];
-            return (
-              <g key={c.name}>
-                <polyline points={pointsStr} fill="none" stroke={c.color} strokeWidth="1.8" />
-                <text x={scaleX(lastPt.x) + 4} y={scaleY(lastPt.y) + 3} fontSize="8.5" fill={c.color} fontWeight="bold">
-                  {c.name}
+            {/* Grid lines Y */}
+            {ticksY.map(val => {
+              const y = scaleY(val);
+              return (
+                <g key={`gy-${val}`}>
+                  <line x1={padding.left} y1={y} x2={padding.left + plotWidth} y2={y} stroke="var(--line)" strokeWidth="0.6" strokeDasharray="2,2" />
+                  <text x={padding.left - 8} y={y + 3} fontSize="9" textAnchor="end" fill="var(--muted)">
+                    {f0(val)}
+                  </text>
+                </g>
+              );
+            })}
+
+            {/* Trazado de Curvas Normativas DE */}
+            {curves.map(c => {
+              const pointsStr = c.points.map(pt => `${scaleX(pt.x)},${scaleY(pt.y)}`).join(' ');
+              const lastPt = c.points[c.points.length - 1];
+              return (
+                <g key={c.name}>
+                  <polyline points={pointsStr} fill="none" stroke={c.color} strokeWidth="1.8" />
+                  <text x={scaleX(lastPt.x) + 4} y={scaleY(lastPt.y) + 3} fontSize="8.5" fill={c.color} fontWeight="bold">
+                    {c.name}
+                  </text>
+                </g>
+              );
+            })}
+
+            {/* Títulos de Ejes */}
+            <text x={padding.left + plotWidth / 2} y={svgHeight - 10} textAnchor="middle" fontSize="11" fontWeight="bold" fill="var(--ink)">
+              {xLabel}
+            </text>
+            <text
+              x={-(padding.top + plotHeight / 2)}
+              y={16}
+              transform="rotate(-90)"
+              textAnchor="middle"
+              fontSize="11"
+              fontWeight="bold"
+              fill="var(--ink)"
+            >
+              {yLabel}
+            </text>
+
+            {/* Punto del Paciente */}
+            {hasPatientPoint && (
+              <g>
+                <circle cx={patientSvgX} cy={patientSvgY} r="10" fill="#dc2626" opacity="0.3" className="animate-ping" />
+                <circle cx={patientSvgX} cy={patientSvgY} r="6" fill="#dc2626" stroke="#ffffff" strokeWidth="2" />
+                <line x1={patientSvgX} y1={patientSvgY} x2={patientSvgX} y2={padding.top + plotHeight} stroke="#dc2626" strokeWidth="1" strokeDasharray="3,3" />
+                <line x1={padding.left} y1={patientSvgY} x2={patientSvgX} y2={patientSvgY} stroke="#dc2626" strokeWidth="1" strokeDasharray="3,3" />
+                <rect x={patientSvgX - 45} y={patientSvgY - 26} width="90" height="18" rx="4" fill="var(--ink)" opacity="0.9" />
+                <text x={patientSvgX} y={patientSvgY - 14} fill="#ffffff" fontSize="9.5" fontWeight="bold" textAnchor="middle">
+                  {ptLabel}
                 </text>
               </g>
-            );
-          })}
+            )}
+          </svg>
 
-          {/* Títulos de Ejes */}
-          <text x={padding.left + plotWidth / 2} y={svgHeight - 10} textAnchor="middle" fontSize="11" fontWeight="bold" fill="var(--ink)">
-            {xLabel}
-          </text>
-          <text
-            x={-(padding.top + plotHeight / 2)}
-            y={16}
-            transform="rotate(-90)"
-            textAnchor="middle"
-            fontSize="11"
-            fontWeight="bold"
-            fill="var(--ink)"
-          >
-            {yLabel}
-          </text>
-
-          {/* Punto del Paciente */}
-          {hasPt && (
-            <g>
-              <circle cx={ptX} cy={ptY} r="10" fill="#dc2626" opacity="0.3" className="animate-ping" />
-              <circle cx={ptX} cy={ptY} r="6" fill="#dc2626" stroke="#ffffff" strokeWidth="2" />
-              <line x1={ptX} y1={ptY} x2={ptX} y2={padding.top + plotHeight} stroke="#dc2626" strokeWidth="1" strokeDasharray="3,3" />
-              <line x1={padding.left} y1={ptY} x2={ptX} y2={ptY} stroke="#dc2626" strokeWidth="1" strokeDasharray="3,3" />
-              <rect x={ptX - 45} y={ptY - 26} width="90" height="18" rx="4" fill="var(--ink)" opacity="0.9" />
-              <text x={ptX} y={ptY - 14} fill="#ffffff" fontSize="9.5" fontWeight="bold" textAnchor="middle">
-                {patientPt.label}
-              </text>
-            </g>
-          )}
-        </svg>
-
-        {!hasPt && (
-          <div className="mt-3 p-3 bg-amber-500/10 border border-amber-500/20 rounded-md text-xs text-amber-900 dark:text-amber-300 flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 shrink-0" />
-            <span>Ingrese edad, peso y talla completos del paciente pediátrico para trazar su punto sobre la curva OMS.</span>
+          {/* Información y Cortes Estadísticos bajo la Gráfica */}
+          <div className="mt-2.5 p-2.5 bg-surface-alt rounded-lg border border-line text-xs flex flex-wrap items-center justify-between gap-2">
+            <div className="space-y-0.5">
+              <div className="font-semibold text-ink">
+                {chartMeta.description}
+              </div>
+              {interpCutText && (
+                <div className="text-[11px] text-muted">
+                  <strong>Puntos de corte normativos calculados:</strong> {interpCutText}
+                </div>
+              )}
+            </div>
+            {hasPatientPoint ? (
+              <span className={`pill ${level} text-xs font-bold`}>
+                {diagnosis}
+              </span>
+            ) : (
+              <span className="text-xs text-muted italic">
+                {isAgeMismatch
+                  ? 'Punto no trazable: la edad actual está fuera del rango de este indicador.'
+                  : 'Ingrese edad, peso y talla para trazar la posición exacta del paciente sobre esta curva.'}
+              </span>
+            )}
           </div>
-        )}
+        </div>
       </div>
     );
   };
@@ -669,7 +682,7 @@ export default function GrowthChartsView({ p, c, set, upd }) {
               {evaluationModel === 'embarazada'
                 ? 'Curva de Evaluación Nutricional de la Embarazada (IMC / Semanas)'
                 : evaluationModel === 'pediatrico'
-                ? 'Gráficas de Crecimiento Pediátrico y Adolescente (OMS)'
+                ? 'Catálogo de Gráficas de Crecimiento (OMS / MINSAL)'
                 : 'Diagnóstico Antropométrico de Adulto'}
             </h3>
           </div>
@@ -719,11 +732,11 @@ export default function GrowthChartsView({ p, c, set, upd }) {
           <span className="text-ink">
             {evaluationModel === 'pediatrico' ? (
               <>
-                <strong>Criterio Pediátrico Activo (OMS):</strong> Paciente menor de 19 años ({edadAnos != null ? `${edadAnos} años` : `${edadMeses || 0} meses`}). Se evalúa con las <strong>Gráficas Oficiales de Crecimiento OMS (MINSAL El Salvador)</strong> según su grupo de edad.
+                <strong>Criterio Pediátrico y Adolescente Activo (OMS):</strong> Paciente menor de 19 años ({effectiveAge.formattedAge || 'edad no especificada'}). Se evalúa con las <strong>Tablas Oficiales de Crecimiento OMS 2006 y 2007 (MINSAL El Salvador)</strong> según su grupo de edad y sexo ({sexo === 'F' ? 'Femenino' : 'Masculino'}).
               </>
             ) : evaluationModel === 'adulto' ? (
               <>
-                <strong>Criterio de Adulto Activo:</strong> Paciente de 19 años o más ({edadAnos != null ? `${edadAnos} años` : 'edad no especificada'}). Se evalúa el estado nutricional mediante <strong>Índice de Masa Corporal (IMC)</strong> {edadAnos >= 65 ? 'bajo criterios OPS (Adulto Mayor)' : 'según puntos de corte estándar de la OMS'}.
+                <strong>Criterio de Adulto Activo:</strong> Paciente de 19 años o más ({effectiveAge.formattedAge || 'edad no especificada'}). Se evalúa el estado nutricional mediante <strong>Índice de Masa Corporal (IMC)</strong> {edadAnos >= 65 ? 'bajo criterios OPS (Adulto Mayor)' : 'según puntos de corte estándar de la OMS'}.
               </>
             ) : (
               <>
@@ -801,20 +814,35 @@ export default function GrowthChartsView({ p, c, set, upd }) {
           </div>
           <div>
             <label className="font-semibold text-ink block mb-1">Perímetro Cefálico (cm):</label>
-            <input
-              type="number"
-              step="any"
-              className="inp text-xs"
-              placeholder="0-24m (ej. 45)"
-              value={a.pc || ''}
-              onChange={e => set('antro.pc', e.target.value)}
-            />
+            {effectiveAge.isUnder2 ? (
+              <input
+                type="number"
+                step="any"
+                className="inp text-xs"
+                placeholder="0-24m (ej. 45)"
+                value={a.pc || ''}
+                onChange={e => set('antro.pc', e.target.value)}
+              />
+            ) : (
+              <div>
+                <input
+                  type="text"
+                  disabled
+                  className="inp text-xs opacity-50 cursor-not-allowed bg-[var(--sunken)]"
+                  value={a.pc || ''}
+                  placeholder="Solo aplicable de 0 a 24 meses"
+                />
+                <span className="text-[10px] text-muted italic block mt-0.5">
+                  Solo aplicable de 0 a 24 meses (desactivado para ≥ 2 años)
+                </span>
+              </div>
+            )}
           </div>
           <div>
             <label className="font-semibold text-ink block mb-1">Tipo de Medición:</label>
             <select
               className="inp text-xs"
-              value={a.longitudTipo || 'de_pie'}
+              value={a.longitudTipo || (effectiveAge.isUnder2 ? 'acostado' : 'de_pie')}
               onChange={e => set('antro.longitudTipo', e.target.value)}
             >
               <option value="de_pie">De pie (Estatura / Talla)</option>
@@ -845,9 +873,9 @@ export default function GrowthChartsView({ p, c, set, upd }) {
               {pregnancyResult.diagnosis}
             </span>
           )}
-          {evaluationModel === 'pediatrico' && pediatricResult && (
-            <span className={`pill ${pediatricResult.level} text-xs font-bold`}>
-              {pediatricResult.primaryDiagnosis}
+          {evaluationModel === 'pediatrico' && chartEval && (
+            <span className={`pill ${chartEval.level} text-xs font-bold`}>
+              {chartEval.chartMeta.shortCode}: {chartEval.diagnosis}
             </span>
           )}
           {evaluationModel === 'adulto' && c.imcCl && (
@@ -871,18 +899,26 @@ export default function GrowthChartsView({ p, c, set, upd }) {
           </div>
         )}
 
-        {evaluationModel === 'pediatrico' && pediatricResult && (
+        {evaluationModel === 'pediatrico' && chartEval && (
           <div className="text-xs text-ink space-y-1.5 leading-relaxed">
             <div>
-              <strong>Diagnóstico Nutricional Pediátrico:</strong> <strong>{pediatricResult.primaryDiagnosis}</strong> (según curvas de referencia OMS 2006 / 2007 adoptadas por la Unidad de Nutrición del MINSAL).
+              <strong>Diagnóstico Pediátrico para la Gráfica Activa ({chartEval.chartMeta.name}):</strong>{' '}
+              <strong className="text-brand">{chartEval.diagnosis}</strong> (Norma: {chartEval.chartGroup.norma}).
             </div>
-            {Object.entries(pediatricResult.indicators).map(([k, ind]) => (
-              <div key={k} className="flex items-center gap-2">
-                <span className="text-muted">• {ind.name}:</span>
-                <span className="font-semibold">{ind.diag}</span>
-                <span className="num text-muted">({f1(ind.value)})</span>
+            {pediatricResult && Object.keys(pediatricResult.indicators).length > 0 && (
+              <div className="pt-1">
+                <span className="font-semibold text-muted">Evaluación integral según datos ingresados:</span>
+                <div className="grid gap-1 sm:grid-cols-2 mt-1">
+                  {Object.entries(pediatricResult.indicators).map(([k, ind]) => (
+                    <div key={k} className="flex items-center gap-1.5 text-[11px] p-1 rounded bg-surface border border-line">
+                      <span className="text-muted font-medium">• {ind.name}:</span>
+                      <span className="font-semibold text-ink">{ind.diag}</span>
+                      <span className="num text-muted">({f1(ind.value)})</span>
+                    </div>
+                  ))}
+                </div>
               </div>
-            ))}
+            )}
             <div className="text-muted pt-1 border-t border-line">
               <strong>Impacto en Requerimientos y Prescripción:</strong> Se aplican requerimientos energéticos infantojuveniles (fórmulas Schofield / FAO-OMS pediátricas) garantizando proteína y micronutrientes para crecimiento estatural, evitando dietas hipocalóricas restrictivas.
             </div>
